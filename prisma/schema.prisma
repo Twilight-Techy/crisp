@@ -1,0 +1,116 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ENUMS
+
+enum ReportStatus {
+  RECEIVED
+  UNDER_INVESTIGATION
+  RESOLVED
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ContentCategory {
+  EMERGENCY
+  SAFETY
+  MEDICAL
+  NON_EMERGENCY
+  NIGHT_SAFETY
+  GENERAL
+}
+
+// MODELS
+
+model IncidentReport {
+  id             String           @id @default(cuid())
+  title          String
+  description    String
+  type           String
+  location       String
+  latitude       Float
+  longitude      Float
+  isAnonymous    Boolean          @map("is_anonymous")
+  trackingCode   String           @unique
+  status         ReportStatus     @default(RECEIVED)
+  reportedAt     DateTime         @default(now())
+  resolvedAt     DateTime?
+  reporterName   String?
+  reporterEmail  String?
+
+  mediaAttachments MediaAttachment[]
+  timelineUpdates  TimelineUpdate[]
+}
+
+model MediaAttachment {
+  id              String         @id @default(cuid())
+  fileUrl         String
+  fileType        String
+  uploadedAt      DateTime       @default(now())
+
+  incidentReportId String
+  incidentReport   IncidentReport @relation(fields: [incidentReportId], references: [id])
+}
+
+model TimelineUpdate {
+  id              String         @id @default(cuid())
+  title           String
+  description     String
+  timestamp       DateTime       @default(now())
+  status          ReportStatus?
+
+  incidentReportId String
+  incidentReport   IncidentReport @relation(fields: [incidentReportId], references: [id])
+}
+
+model Alert {
+  id          String        @id @default(cuid())
+  title       String
+  description String
+  location    String
+  latitude    Float
+  longitude   Float
+  category    String
+  severity    AlertSeverity
+  source      String
+  status      String
+  createdAt   DateTime      @default(now())
+}
+
+model SafetyTip {
+  id        String          @id @default(cuid())
+  title     String
+  content   String
+  icon      String
+  category  ContentCategory
+  createdAt DateTime        @default(now())
+}
+
+model EmergencyContact {
+  id          String          @id @default(cuid())
+  name        String
+  phoneNumber String
+  description String?
+  category    ContentCategory
+}
+
+model CommunityStat {
+  id                   String   @id @default(cuid())
+  totalReports         Int
+  responseRate         Float    // percentage like 92.5
+  activeUsers          Int
+  crimeReductionPercent Float
+  generatedAt          DateTime @default(now())
+}

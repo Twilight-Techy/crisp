@@ -92,3 +92,8 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* for MapLibre */
+@import "maplibre-gl/dist/maplibre-gl.css";
+/* for Cesium */
+@import "~cesium/Build/Cesium/Widgets/widgets.css";

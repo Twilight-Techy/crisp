@@ -64,17 +64,37 @@ export default function TrackPage() {
     anonymous: true,
   }
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     setLoading(true)
-    // Simulate API call
-    setTimeout(() => {
-      if (trackingCode.toUpperCase().includes("CRISP") || trackingCode.length > 5) {
-        setReportData(mockReport)
-      } else {
+    try {
+      const res = await fetch(`/api/track/${trackingCode.trim()}`)
+      if (!res.ok) {
         setReportData(null)
+      } else {
+        const data = await res.json()
+        setReportData({
+          ...data,
+          id: data.trackingCode,
+          type: data.type,
+          location: data.location,
+          submittedAt: data.reportedAt,
+          status: data.status.toLowerCase(),
+          priority: data.priority || "medium",
+          updates: data.timelineUpdates.map((u: any) => ({
+            date: u.timestamp,
+            status: u.status?.toLowerCase() || "pending",
+            message: u.description,
+            officer: u.officer || "System",
+          })),
+          description: data.description,
+          anonymous: data.isAnonymous,
+        })
       }
-      setLoading(false)
-    }, 1000)
+    } catch (err) {
+      console.error("Tracking error:", err)
+      setReportData(null)
+    }
+    setLoading(false)
   }
 
   const getStatusColor = (status: string) => {

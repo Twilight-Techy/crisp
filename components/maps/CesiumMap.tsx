@@ -6,7 +6,8 @@ import {
     Ion,
     createWorldTerrainAsync,
     Cartesian3,
-    SceneMode
+    SceneMode,
+    Color
 } from "cesium"
 import "cesium/Build/Cesium/Widgets/widgets.css"
 
@@ -28,6 +29,17 @@ export default function CesiumMap({
     const container = useRef<HTMLDivElement>(null)
     const viewerRef = useRef<Viewer>()
     const isViewerReady = useRef(false)
+
+    const colorMap: Record<string, Color> = {
+        theft: Color.RED,
+        vandalism: Color.ORANGE,
+        assault: Color.DARKRED,
+        drug: Color.PURPLE,
+        suspicious: Color.YELLOW,
+        noise: Color.BLUE,
+        traffic: Color.GREEN,
+        other: Color.GRAY,
+    }
 
     // Force container to have explicit dimensions
     const ensureContainerSize = useCallback(() => {
@@ -144,6 +156,31 @@ export default function CesiumMap({
             viewerRef.current = undefined
         }
     }, [incidents, ensureContainerSize])
+
+    useEffect(() => {
+        const viewer = viewerRef.current
+        if (!viewer || !isViewerReady.current) return
+
+        // ➋ Remove any existing incident entities
+        viewer.entities.removeAll()
+
+        // ➌ Add each incident back in, colored by type
+        incidents.forEach((inc) => {
+            const color = colorMap[inc.type.toLowerCase()] ?? Color.GRAY
+            viewer.entities.add({
+                id: inc.id,
+                position: Cartesian3.fromDegrees(inc.longitude, inc.latitude, 0),
+                point: {
+                    pixelSize: 10,
+                    color,
+                    outlineColor: Color.BLACK,
+                    outlineWidth: 1,
+                },
+                // optional: attach a label if you like
+                // label: { text: inc.type, font: '12px sans-serif' }
+            })
+        })
+    }, [incidents])
 
     // Handle search coordinates - FIXED WITH MULTIPLE APPROACHES
     useEffect(() => {

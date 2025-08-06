@@ -18,6 +18,17 @@ export default function MapLibreMap({
     incidents: Incident[]
     searchCoords?: [number, number] | null
 }) {
+    const typeColorMap: Record<string, string> = {
+        theft: '#e74c3c',
+        vandalism: '#e67e22',
+        assault: '#c0392b',
+        drug: '#8e44ad',
+        suspicious: '#f1c40f',
+        noise: '#3498db',
+        traffic: '#2ecc71',
+        other: '#95a5a6',
+    }
+
     const mapContainer = useRef<HTMLDivElement>(null)
     const mapRef = useRef<Map>()
 
@@ -79,12 +90,7 @@ export default function MapLibreMap({
                     source: id,
                     paint: {
                         "circle-radius": 6,
-                        "circle-color":
-                            inc.status === "UNDER_INVESTIGATION"
-                                ? "#f1c40f"
-                                : inc.status === "RESOLVED"
-                                    ? "#27ae60"
-                                    : "#e74c3c",
+                        "circle-color": typeColorMap[inc.type.toLowerCase()] ?? '#95a5a6',
                     },
                 })
             })

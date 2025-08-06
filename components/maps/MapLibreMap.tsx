@@ -11,7 +11,13 @@ type Incident = {
     status: string
 }
 
-export default function MapLibreMap({ incidents }: { incidents: Incident[] }) {
+export default function MapLibreMap({
+    incidents,
+    searchCoords,
+}: {
+    incidents: Incident[]
+    searchCoords?: [number, number] | null
+}) {
     const mapContainer = useRef<HTMLDivElement>(null)
     const mapRef = useRef<Map>()
 
@@ -21,11 +27,22 @@ export default function MapLibreMap({ incidents }: { incidents: Incident[] }) {
             mapRef.current = new maplibregl.Map({
                 container: mapContainer.current,
                 style: `https://api.maptiler.com/maps/streets/style.json?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`,
-                center: [0, 0],
-                zoom: 2,
+                center: [-74.0, 40.7],
+                zoom: 10,
             })
         }
     }, [])
+
+    // 🔍 Fly to searched location
+    useEffect(() => {
+        if (searchCoords && mapRef.current) {
+            mapRef.current.flyTo({
+                center: searchCoords,
+                zoom: 13,
+                essential: true,
+            })
+        }
+    }, [searchCoords])
 
     // Whenever incidents change, update markers—but only once the style is ready
     useEffect(() => {

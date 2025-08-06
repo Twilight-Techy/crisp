@@ -27,6 +27,7 @@ import {
   TrendingUp,
 } from "lucide-react"
 import { Navbar } from "@/components/navbar"
+import { CesiumDebugInfo } from "@/components/maps/CesiumDebugInfo"
 
 // dynamic import so MapLibre & Cesium only load in the browser:
 const MapLibreMap = dynamic(() => import("@/components/maps/MapLibreMap"), { ssr: false })
@@ -41,6 +42,8 @@ export default function MapPage() {
     severity: "all",
     status: "all",
   })
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchCoords, setSearchCoords] = useState<[number, number] | null>(null)
 
   // placeholder data — swap these for your real API calls
   const crimeTypes = [
@@ -82,6 +85,53 @@ export default function MapPage() {
     }
   }
 
+  // Handle geocoding using MapTiler
+  // Add this to your main component to debug the search handling
+  const handleSearch = async () => {
+    if (!searchQuery) return
+
+    console.log("🔍 Searching for:", searchQuery)
+
+    try {
+      const res = await fetch(
+        `https://api.maptiler.com/geocoding/${encodeURIComponent(searchQuery)}.json?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`
+      )
+      const data = await res.json()
+
+      console.log("📍 Geocoding response:", data)
+
+      const coords = data.features?.[0]?.center
+      if (coords) {
+        console.log("✅ Found coordinates:", coords, "Type:", typeof coords[0], typeof coords[1])
+
+        // Ensure coordinates are numbers
+        const lon = Number(coords[0])
+        const lat = Number(coords[1])
+
+        if (!isNaN(lon) && !isNaN(lat)) {
+          console.log("🎯 Setting search coordinates:", [lon, lat])
+          setSearchCoords([lon, lat]) // [lon, lat] format
+        } else {
+          console.error("Invalid coordinates:", { lon, lat })
+          alert("Invalid coordinates returned from geocoding service.")
+        }
+      } else {
+        console.log("❌ No coordinates found in response")
+        alert("Location not found.")
+      }
+    } catch (error) {
+      console.error("❌ Geocoding error:", error)
+      alert("Error searching for location.")
+    }
+  }
+
+  // Also add this useEffect to your main component to monitor searchCoords changes
+  useEffect(() => {
+    if (searchCoords) {
+      console.log("🔄 searchCoords updated:", searchCoords, "Map view:", mapView)
+    }
+  }, [searchCoords, mapView])
+
   // Hook up real data fetching on filters here…
   // useEffect(() => {...}, [filters])
 
@@ -107,7 +157,17 @@ export default function MapPage() {
               </div>
               <div className="relative">
                 <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="Search location..." className="pl-10" />
+                <Input
+                  placeholder="Search location..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSearch()
+                    }
+                  }}
+                  className="pl-10"
+                />
               </div>
             </div>
 
@@ -221,7 +281,7 @@ export default function MapPage() {
         </div>
 
         {/* Map Area */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative map-container" style={{ minHeight: '400px', minWidth: '400px' }}>
           {/* Map Controls */}
           <div className="absolute top-4 left-4 z-10 flex flex-col space-y-2">
             <Button
@@ -246,7 +306,7 @@ export default function MapPage() {
           </div>
 
           {/* Export & My Location */}
-          <div className="absolute top-4 right-4 z-10 flex space-x-2">
+          <div className="absolute top-16 right-4 z-10 flex space-x-2">
             <Button variant="outline" size="sm" className="bg-background/80 backdrop-blur-sm">
               <Download className="w-4 h-4 mr-2" /> Export Data
             </Button>
@@ -255,14 +315,17 @@ export default function MapPage() {
             </Button>
           </div>
 
-          {/* Map Instance */}
-          {mapView === "2d"
-            ? <MapLibreMap incidents={/* your fetched incidents */[]} />
-            : <CesiumMap incidents={/* your fetched incidents */[]} />
-          }
+          {/* Map Instance - with better container */}
+          <div className="absolute inset-0" style={{ top: 0, left: 0, right: 0, bottom: 0 }}>
+            {mapView === "2d" ? (
+              <MapLibreMap incidents={/* your fetched incidents */[]} searchCoords={searchCoords} />
+            ) : (
+              <CesiumMap incidents={/* your fetched incidents */[]} searchCoords={searchCoords} />
+            )}
+          </div>
 
           {/* Legend */}
-          <div className="absolute bottom-4 left-4 z-10">
+          {/* <div className="absolute bottom-4 left-4 z-10">
             <Card className="bg-background/90 backdrop-blur-sm">
               <CardContent className="p-4">
                 <h4 className="font-semibold text-sm mb-3">Map Legend</h4>
@@ -282,8 +345,9 @@ export default function MapPage() {
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </div> */}
         </div>
+        {/* <CesiumDebugInfo searchCoords={searchCoords} mapView={mapView} /> */}
       </div>
     </div>
   )

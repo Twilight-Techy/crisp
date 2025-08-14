@@ -6,7 +6,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
 
     // parse filters
-    const types = searchParams.getAll('type')        // e.g. ?type=theft&type=vandalism
+    const types = searchParams.getAll('type')        // e.g. ?type=Theft&type=Vandalism
     const status = searchParams.get('status')    // currently unused, but you could map that to status
     const since = searchParams.get('since')          // e.g. '7days', '24hours'
 

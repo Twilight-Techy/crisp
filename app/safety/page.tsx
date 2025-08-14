@@ -207,11 +207,10 @@ export default function SafetyResourcesPage() {
                     <Button
                       key={index}
                       variant="outline"
-                      className={`w-full justify-start text-left h-auto py-3 ${
-                        contact.color === "red"
+                      className={`w-full justify-start text-left h-auto py-3 ${contact.color === "red"
                           ? "bg-red-50 hover:bg-red-100 border-red-200 text-red-700"
                           : "bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center space-x-3">
                         <contact.icon className={`w-5 h-5 ${getSeverityColor(contact.color)} flex-shrink-0`} />

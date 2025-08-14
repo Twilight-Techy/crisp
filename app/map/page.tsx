@@ -38,7 +38,7 @@ type Incident = {
   id: string
   latitude: number
   longitude: number
-  type: string      // e.g. "theft", "vandalism", ...
+  type: string      // e.g. "Theft", "Vandalism", ...
   status: string    // e.g. "UNDER_INVESTIGATION", "RESOLVED"
   location: string
   reportedAt: string  // ISO timestamp
@@ -84,14 +84,14 @@ export default function MapPage() {
     })
     // then map to your display structure
     return [
-      { id: "theft", label: "Theft/Burglary", color: "bg-red-500", count: counts["theft"] || 0 },
-      { id: "vandalism", label: "Vandalism", color: "bg-orange-500", count: counts["vandalism"] || 0 },
-      { id: "assault", label: "Assault", color: "bg-red-600", count: counts["assault"] || 0 },
-      { id: "drug", label: "Drug Activity", color: "bg-purple-500", count: counts["drug"] || 0 },
-      { id: "suspicious", label: "Suspicious", color: "bg-yellow-500", count: counts["suspicious"] || 0 },
-      { id: "noise", label: "Noise Complaint", color: "bg-blue-500", count: counts["noise"] || 0 },
-      { id: "traffic", label: "Traffic Violation", color: "bg-green-500", count: counts["traffic"] || 0 },
-      { id: "other", label: "Other", color: "bg-gray-500", count: counts["other"] || 0 },
+      { id: "Theft", label: "Theft/Burglary", color: "bg-red-500", count: counts["Theft"] || 0 },
+      { id: "Vandalism", label: "Vandalism", color: "bg-orange-500", count: counts["Vandalism"] || 0 },
+      { id: "Assault", label: "Assault", color: "bg-red-600", count: counts["Assault"] || 0 },
+      { id: "Drug", label: "Drug Activity", color: "bg-purple-500", count: counts["Drug"] || 0 },
+      { id: "Suspicious", label: "Suspicious", color: "bg-yellow-500", count: counts["Suspicious"] || 0 },
+      { id: "Noise", label: "Noise Complaint", color: "bg-blue-500", count: counts["Noise"] || 0 },
+      { id: "Traffic", label: "Traffic Violation", color: "bg-green-500", count: counts["Traffic"] || 0 },
+      { id: "Other", label: "Other", color: "bg-gray-500", count: counts["Other"] || 0 },
     ]
   }, [incidents])
 

@@ -19,14 +19,14 @@ export default function MapLibreMap({
     searchCoords?: [number, number] | null
 }) {
     const typeColorMap: Record<string, string> = {
-        theft: '#e74c3c',
-        vandalism: '#e67e22',
-        assault: '#c0392b',
-        drug: '#8e44ad',
-        suspicious: '#f1c40f',
-        noise: '#3498db',
-        traffic: '#2ecc71',
-        other: '#95a5a6',
+        Theft: '#e74c3c',
+        Vandalism: '#e67e22',
+        Assault: '#c0392b',
+        Drug: '#8e44ad',
+        Suspicious: '#f1c40f',
+        Noise: '#3498db',
+        Traffic: '#2ecc71',
+        Other: '#95a5a6',
     }
 
     const mapContainer = useRef<HTMLDivElement>(null)
@@ -100,7 +100,7 @@ export default function MapLibreMap({
         if (map.isStyleLoaded && map.isStyleLoaded()) {
             updateLayers()
         } else {
-            // otherwise wait for the first load event
+            // Otherwise wait for the first load event
             map.once("load", updateLayers)
         }
     }, [incidents])

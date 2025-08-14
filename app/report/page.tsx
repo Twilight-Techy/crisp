@@ -43,14 +43,14 @@ export default function ReportPage() {
   const [trackingCode, setTrackingCode] = useState("")
 
   const incidentTypes = [
-    { value: "theft", label: "Theft / Burglary", icon: "🏠" },
-    { value: "vandalism", label: "Vandalism", icon: "🎨" },
-    { value: "assault", label: "Assault / Violence", icon: "⚠️" },
-    { value: "drug", label: "Drug Activity", icon: "💊" },
-    { value: "suspicious", label: "Suspicious Activity", icon: "👁️" },
-    { value: "noise", label: "Noise Complaint", icon: "🔊" },
-    { value: "traffic", label: "Traffic Violation", icon: "🚗" },
-    { value: "other", label: "Other", icon: "📝" },
+    { value: "Theft", label: "Theft / Burglary", icon: "🏠" },
+    { value: "Vandalism", label: "Vandalism", icon: "🎨" },
+    { value: "Assault", label: "Assault / Violence", icon: "⚠️" },
+    { value: "Drug", label: "Drug Activity", icon: "💊" },
+    { value: "Suspicious", label: "Suspicious Activity", icon: "👁️" },
+    { value: "Noise", label: "Noise Complaint", icon: "🔊" },
+    { value: "Traffic", label: "Traffic Violation", icon: "🚗" },
+    { value: "Other", label: "Other", icon: "📝" },
   ]
 
   const steps = [
@@ -288,7 +288,7 @@ export default function ReportPage() {
                       <Label htmlFor="description">Description of the incident</Label>
                       <Textarea
                         id="description"
-                        placeholder="Please describe what happened, including any relevant details about people, vehicles, or other important information..."
+                        placeholder="Please describe what happened, including any relevant details about people, vehicles, or Other important information..."
                         rows={6}
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}

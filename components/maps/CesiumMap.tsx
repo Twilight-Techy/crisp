@@ -31,14 +31,14 @@ export default function CesiumMap({
     const isViewerReady = useRef(false)
 
     const colorMap: Record<string, Color> = {
-        theft: Color.RED,
-        vandalism: Color.ORANGE,
-        assault: Color.DARKRED,
-        drug: Color.PURPLE,
-        suspicious: Color.YELLOW,
-        noise: Color.BLUE,
-        traffic: Color.GREEN,
-        other: Color.GRAY,
+        Theft: Color.RED,
+        Vandalism: Color.ORANGE,
+        Assault: Color.DARKRED,
+        Drug: Color.PURPLE,
+        Suspicious: Color.YELLOW,
+        Noise: Color.BLUE,
+        Traffic: Color.GREEN,
+        Other: Color.GRAY,
     }
 
     // Force container to have explicit dimensions

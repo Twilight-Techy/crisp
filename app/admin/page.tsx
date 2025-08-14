@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -31,97 +31,145 @@ import { Navbar } from "@/components/navbar"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 
+type Report = {
+  id: string;
+  title?: string;
+  type: string;
+  location: string;
+  description: string;
+  status: "RECEIVED" | "UNDER_INVESTIGATION" | "RESOLVED" | string;
+  reportedAt: string;
+  resolvedAt?: string | null;
+  reporterName?: string | null;
+};
+
 export default function AdminDashboardPage() {
-  const [selectedFilter, setSelectedFilter] = useState("all")
-  const [selectedStatus, setSelectedStatus] = useState("all")
-  const [searchQuery, setSearchQuery] = useState("")
-  const router = useRouter()
+  const router = useRouter();
+  const [reports, setReports] = useState<Report[]>([]);
+  const [total, setTotal] = useState(0);
+  const [selectedFilter, setSelectedFilter] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // Mock data for reports
-  const reports = [
-    {
-      id: 1,
-      type: "Suspicious Activity",
-      location: "Park Avenue & 5th Street",
-      time: "2 hours ago",
-      status: "pending-review",
-      priority: "high",
-      description: "Group of individuals loitering near the park entrance, observed exchanging suspicious packages.",
-      reporter: "Anonymous",
-    },
-    {
-      id: 2,
-      type: "Vandalism",
-      location: "Community Center Wall",
-      time: "4 hours ago",
-      status: "in-progress",
-      priority: "medium",
-      description: "Graffiti found on the north wall of the community center. Needs cleanup and investigation.",
-      reporter: "Jane Doe",
-    },
-    {
-      id: 3,
-      type: "Theft",
-      location: "Main Street Pharmacy",
-      time: "1 day ago",
-      status: "resolved",
-      priority: "medium",
-      description: "Shoplifting incident reported. Suspect identified via security footage.",
-      reporter: "Anonymous",
-    },
-    {
-      id: 4,
-      type: "Noise Complaint",
-      location: "Residential Area, Elm Street",
-      time: "1 day ago",
-      status: "closed",
-      priority: "low",
-      description: "Loud party late at night. Police dispatched, situation resolved.",
-      reporter: "John Smith",
-    },
-    {
-      id: 5,
-      type: "Missing Person",
-      location: "Forest Park Trails",
-      time: "2 days ago",
-      status: "pending-review",
-      priority: "critical",
-      description: "Elderly person reported missing after not returning from a walk.",
-      reporter: "Family Member",
-    },
-  ]
+  // const reports = [
+  //   {
+  //     id: 1,
+  //     type: "Suspicious Activity",
+  //     location: "Park Avenue & 5th Street",
+  //     time: "2 hours ago",
+  //     status: "pending-review",
+  //     priority: "high",
+  //     description: "Group of individuals loitering near the park entrance, observed exchanging Suspicious packages.",
+  //     reporter: "Anonymous",
+  //   },
+  //   {
+  //     id: 2,
+  //     type: "Vandalism",
+  //     location: "Community Center Wall",
+  //     time: "4 hours ago",
+  //     status: "in-progress",
+  //     priority: "medium",
+  //     description: "Graffiti found on the north wall of the community center. Needs cleanup and investigation.",
+  //     reporter: "Jane Doe",
+  //   },
+  //   {
+  //     id: 3,
+  //     type: "Theft",
+  //     location: "Main Street Pharmacy",
+  //     time: "1 day ago",
+  //     status: "resolved",
+  //     priority: "medium",
+  //     description: "Shoplifting incident reported. Suspect identified via security footage.",
+  //     reporter: "Anonymous",
+  //   },
+  //   {
+  //     id: 4,
+  //     type: "Noise Complaint",
+  //     location: "Residential Area, Elm Street",
+  //     time: "1 day ago",
+  //     status: "closed",
+  //     priority: "low",
+  //     description: "Loud party late at night. Police dispatched, situation resolved.",
+  //     reporter: "John Smith",
+  //   },
+  //   {
+  //     id: 5,
+  //     type: "Missing Person",
+  //     location: "Forest Park Trails",
+  //     time: "2 days ago",
+  //     status: "pending-review",
+  //     priority: "critical",
+  //     description: "Elderly person reported missing after not returning from a walk.",
+  //     reporter: "Family Member",
+  //   },
+  // ]
+
+  const statusLabels: Record<string, string> = {
+    RECEIVED: "Received",
+    UNDER_INVESTIGATION: "Under Investigation",
+    RESOLVED: "Resolved",
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "pending-review":
+      case "RECEIVED":
         return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
-      case "in-progress":
+      case "UNDER_INVESTIGATION":
         return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-      case "resolved":
+      case "RESOLVED":
         return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-      case "closed":
-        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
-      case "critical":
-        return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
       default:
         return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
     }
   }
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "critical":
-        return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-      case "high":
-        return "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
-      case "medium":
-        return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
-      case "low":
-        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-      default:
-        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
+  useEffect(() => {
+    fetchReports();
+  }, [selectedFilter, selectedStatus]);
+
+  async function fetchReports() {
+    setLoading(true);
+    try {
+      const qs = new URLSearchParams();
+      if (selectedFilter !== "all") qs.set("type", selectedFilter);
+      if (selectedStatus !== "all") qs.set("status", selectedStatus);
+      if (searchQuery) qs.set("search", searchQuery);
+
+      const res = await fetch(`/api/admin/reports?${qs.toString()}`);
+      const data = await res.json();
+      setReports(data.reports || []);
+      setTotal(data.total || 0);
+    } catch (err) {
+      console.error("Failed to fetch reports", err);
+    } finally {
+      setLoading(false);
     }
   }
+
+  const handleSearch = async () => {
+    await fetchReports();
+  };
+
+  const handleUpdateStatus = async (id: string, newStatus: string) => {
+    try {
+      const res = await fetch("/api/admin/reports", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status: newStatus }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        // update locally for snappy UI
+        setReports((prev) => prev.map(r => r.id === id ? { ...r, status: data.updated.status, resolvedAt: data.updated.resolvedAt } : r));
+      } else {
+        console.error("Update failed", data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const filteredReports = reports.filter((report) => {
     const matchesFilter = selectedFilter === "all" || report.type.toLowerCase().includes(selectedFilter.toLowerCase())
@@ -131,7 +179,7 @@ export default function AdminDashboardPage() {
       report.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       report.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
       report.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      report.reporter.toLowerCase().includes(searchQuery.toLowerCase())
+      report.reporterName?.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesFilter && matchesStatus && matchesSearch
   })
 
@@ -245,10 +293,10 @@ export default function AdminDashboardPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="suspicious activity">Suspicious Activity</SelectItem>
-                      <SelectItem value="vandalism">Vandalism</SelectItem>
-                      <SelectItem value="theft">Theft</SelectItem>
-                      <SelectItem value="noise complaint">Noise Complaint</SelectItem>
+                      <SelectItem value="Suspicious activity">Suspicious Activity</SelectItem>
+                      <SelectItem value="Vandalism">Vandalism</SelectItem>
+                      <SelectItem value="Theft">Theft</SelectItem>
+                      <SelectItem value="Noise complaint">Noise Complaint</SelectItem>
                       <SelectItem value="missing person">Missing Person</SelectItem>
                     </SelectContent>
                   </Select>
@@ -286,7 +334,6 @@ export default function AdminDashboardPage() {
                         <div className="flex items-start justify-between">
                           <div className="space-y-1">
                             <div className="flex items-center space-x-2">
-                              <Badge className={getPriorityColor(report.priority)}>{report.priority}</Badge>
                               <Badge className={getStatusColor(report.status)}>{report.status}</Badge>
                             </div>
                             <h3 className="text-lg font-semibold">{report.type}</h3>
@@ -294,7 +341,7 @@ export default function AdminDashboardPage() {
                           <div className="text-right text-sm text-muted-foreground">
                             <div className="flex items-center space-x-1">
                               <Clock className="w-3 h-3" />
-                              <span>{report.time}</span>
+                              <span>{report.reportedAt}</span>
                             </div>
                           </div>
                         </div>
@@ -305,7 +352,7 @@ export default function AdminDashboardPage() {
                             <MapPin className="w-4 h-4" />
                             <span>{report.location}</span>
                             <span>•</span>
-                            <span>Reported by: {report.reporter}</span>
+                            <span>Reported by: {report.reporterName || "Anonymous"}</span>
                           </div>
                           <p className="text-foreground leading-relaxed line-clamp-2">{report.description}</p>
                         </div>

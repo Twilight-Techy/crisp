@@ -280,11 +280,10 @@ export default function TrackPage() {
                       <div key={index} className="flex space-x-4">
                         <div className="flex flex-col items-center">
                           <div
-                            className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                              index === reportData.updates.length - 1
+                            className={`w-10 h-10 rounded-full flex items-center justify-center ${index === reportData.updates.length - 1
                                 ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white"
                                 : "bg-muted text-muted-foreground"
-                            }`}
+                              }`}
                           >
                             {getStatusIcon(update.status)}
                           </div>

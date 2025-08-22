@@ -52,60 +52,6 @@ export default function AdminDashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Mock data for reports
-  // const reports = [
-  //   {
-  //     id: 1,
-  //     type: "Suspicious Activity",
-  //     location: "Park Avenue & 5th Street",
-  //     time: "2 hours ago",
-  //     status: "pending-review",
-  //     priority: "high",
-  //     description: "Group of individuals loitering near the park entrance, observed exchanging Suspicious packages.",
-  //     reporter: "Anonymous",
-  //   },
-  //   {
-  //     id: 2,
-  //     type: "Vandalism",
-  //     location: "Community Center Wall",
-  //     time: "4 hours ago",
-  //     status: "in-progress",
-  //     priority: "medium",
-  //     description: "Graffiti found on the north wall of the community center. Needs cleanup and investigation.",
-  //     reporter: "Jane Doe",
-  //   },
-  //   {
-  //     id: 3,
-  //     type: "Theft",
-  //     location: "Main Street Pharmacy",
-  //     time: "1 day ago",
-  //     status: "resolved",
-  //     priority: "medium",
-  //     description: "Shoplifting incident reported. Suspect identified via security footage.",
-  //     reporter: "Anonymous",
-  //   },
-  //   {
-  //     id: 4,
-  //     type: "Noise Complaint",
-  //     location: "Residential Area, Elm Street",
-  //     time: "1 day ago",
-  //     status: "closed",
-  //     priority: "low",
-  //     description: "Loud party late at night. Police dispatched, situation resolved.",
-  //     reporter: "John Smith",
-  //   },
-  //   {
-  //     id: 5,
-  //     type: "Missing Person",
-  //     location: "Forest Park Trails",
-  //     time: "2 days ago",
-  //     status: "pending-review",
-  //     priority: "critical",
-  //     description: "Elderly person reported missing after not returning from a walk.",
-  //     reporter: "Family Member",
-  //   },
-  // ]
-
   const statusLabels: Record<string, string> = {
     RECEIVED: "Received",
     UNDER_INVESTIGATION: "Under Investigation",
@@ -137,7 +83,7 @@ export default function AdminDashboardPage() {
       if (selectedStatus !== "all") qs.set("status", selectedStatus);
       if (searchQuery) qs.set("search", searchQuery);
 
-      const res = await fetch(`/api/admin/reports?${qs.toString()}`);
+      const res = await fetch(`/api/admin/reports?${qs.toString()}`, { cache: 'no-store' });
       const data = await res.json();
       setReports(data.reports || []);
       setTotal(data.total || 0);
@@ -334,7 +280,9 @@ export default function AdminDashboardPage() {
                         <div className="flex items-start justify-between">
                           <div className="space-y-1">
                             <div className="flex items-center space-x-2">
-                              <Badge className={getStatusColor(report.status)}>{report.status}</Badge>
+                              <Badge className={getStatusColor(report.status)}>
+                                {statusLabels[report.status as keyof typeof statusLabels] ?? report.status}
+                              </Badge>
                             </div>
                             <h3 className="text-lg font-semibold">{report.type}</h3>
                           </div>

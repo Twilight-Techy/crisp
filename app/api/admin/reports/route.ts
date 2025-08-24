@@ -74,39 +74,3 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Failed to list reports" }, { status: 500 });
     }
 }
-
-// PATCH /api/admin/reports (body { id, status })
-export async function PATCH(req: NextRequest) {
-    try {
-        const body = await req.json();
-        const { id, status } = body;
-
-        if (!id || !status) {
-            return NextResponse.json({ error: "id and status are required" }, { status: 400 });
-        }
-
-        const data: any = { status };
-
-        if (status === "RESOLVED") {
-            data.resolvedAt = new Date();
-        } else {
-            // if toggling away from resolved, clear resolvedAt
-            data.resolvedAt = null;
-        }
-
-        const updated = await prisma.incidentReport.update({
-            where: { id },
-            data,
-            select: {
-                id: true,
-                status: true,
-                resolvedAt: true,
-            },
-        });
-
-        return NextResponse.json({ updated });
-    } catch (err) {
-        console.error(err);
-        return NextResponse.json({ error: "Failed to update report" }, { status: 500 });
-    }
-}

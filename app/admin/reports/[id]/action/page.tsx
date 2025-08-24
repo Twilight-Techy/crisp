@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -14,38 +14,168 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
 
+type ActionTaken = {
+  timestamp: string;
+  action: string;
+  by?: string;
+}
+
+type Attachment = {
+  url: string;
+  type: "image" | "video" | "audio" | "file";
+  name?: string;
+  uploadedAt?: string;
+}
+
+type ReportShape = {
+  id: string;
+  title?: string;
+  type: string;
+  location: string;
+  coordinates?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  status: "RECEIVED" | "UNDER_INVESTIGATION" | "RESOLVED" | string;
+  reportedAt: string;
+  resolvedAt?: string | null;
+  reporterName?: string | null;
+  reporterEmail?: string | null;
+  attachments?: Attachment[];
+  actionsTaken?: ActionTaken[];
+  trackingCode?: string;
+  description?: string;
+};
+
 export default function ReportActionPage() {
   const params = useParams()
   const { id } = params
   const router = useRouter()
 
-  // Mock data for a single report
-  const report = {
-    id: Number(id),
-    type: "Suspicious Activity",
-    location: "Park Avenue & 5th Street, Cityville",
-    time: "2024-07-15T14:30:00Z",
-    status: "pending-review",
-    priority: "high",
-    description:
-      "A group of 3-4 individuals has been observed loitering near the park entrance for the past two hours. They appear to be exchanging small packages discreetly. One individual was seen attempting to open car doors in the adjacent parking lot. They are wearing dark hoodies and seem to be avoiding eye contact with passersby. This behavior is unusual for this area.",
-    reporter: "Anonymous User",
-    contactInfo: "N/A",
-    actionsTaken: [
-      {
-        timestamp: "2024-07-15T15:00:00Z",
-        action: "Report received and assigned to Officer Smith.",
-        by: "System",
-      },
-    ],
-    notes:
-      "Initial assessment suggests potential drug dealing or car theft attempts. Officer advised to approach with caution.",
-  }
+  const [report, setReport] = useState<ReportShape | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const [newStatus, setNewStatus] = useState(report.status)
+  // form state
+  const [newStatus, setNewStatus] = useState("pending-review")
   const [actionNote, setActionNote] = useState("")
   const [assignedTo, setAssignedTo] = useState("")
   const [resolutionDetails, setResolutionDetails] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!id) return
+    fetchReport()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  async function fetchReport() {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/reports/${id}`, { cache: "no-store" })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Unknown" }))
+        setError(err?.error || `Failed to load (status ${res.status})`)
+        setReport(null)
+        return
+      }
+      const data = await res.json()
+      // normalize dates
+      if (data.reportedAt) data.reportedAt = new Date(data.reportedAt).toISOString()
+      if (data.resolvedAt) data.resolvedAt = new Date(data.resolvedAt).toISOString()
+      if (Array.isArray(data.actionsTaken)) {
+        data.actionsTaken = data.actionsTaken.map((a: any) => ({ ...a, timestamp: new Date(a.timestamp).toISOString() }))
+      }
+      setReport(data)
+
+      // map DB enum -> UI value for radios
+      const enumToUi = (s?: string) => {
+        if (!s) return "pending-review"
+        if (s === "RECEIVED") return "pending-review"
+        if (s === "UNDER_INVESTIGATION") return "in-progress"
+        if (s === "RESOLVED") return "resolved"
+        return "pending-review"
+      }
+      setNewStatus(enumToUi(data.status))
+    } catch (err) {
+      console.error(err)
+      setError("Failed to fetch report")
+      setReport(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const statusLabels: Record<string, string> = {
+    RECEIVED: "Received",
+    UNDER_INVESTIGATION: "Under Investigation",
+    RESOLVED: "Resolved",
+    "pending-review": "Pending Review",
+    "in-progress": "In Progress",
+    "resolved": "Resolved",
+    "closed": "Closed",
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "RECEIVED":
+      case "pending-review":
+        return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
+      case "UNDER_INVESTIGATION":
+      case "in-progress":
+        return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+      case "RESOLVED":
+      case "resolved":
+        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+      case "closed":
+        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
+      default:
+        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
+    }
+  }
+
+  const formatTimestamp = (timestamp?: string) => {
+    if (!timestamp) return ""
+    try {
+      const d = new Date(timestamp)
+      return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    } catch {
+      return String(timestamp)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-green-50/30 pt-16">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-4xl mx-auto text-center">
+            <p className="text-muted-foreground">Loading report...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-green-50/30 pt-16">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-4xl mx-auto text-center">
+            <h1 className="text-2xl font-bold mb-4">Error</h1>
+            <p className="text-muted-foreground mb-8">{error}</p>
+            <Button asChild>
+              <Link href={`/admin/reports/${id}`}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Report Details
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (!report) {
     return (
@@ -67,52 +197,36 @@ export default function ReportActionPage() {
     )
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "pending-review":
-        return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
-      case "in-progress":
-        return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-      case "resolved":
-        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-      case "closed":
-        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
-      default:
-        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
+  // map UI status -> server will accept UI strings and map server-side too
+  const handleUpdateReport = async () => {
+    setSaving(true)
+    try {
+      const payload = {
+        id: report.id,
+        status: newStatus,
+        note: actionNote || undefined,
+        assignedTo: assignedTo || undefined,
+        resolutionDetails: resolutionDetails || undefined,
+      }
+      const res = await fetch("/api/admin/reports/${id}", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        console.error("Update failed", data)
+        alert(data?.error || "Failed to update report")
+        return
+      }
+      // success -> redirect to report details (page will show new timeline/status)
+      router.push(`/admin/reports/${report.id}`)
+    } catch (err) {
+      console.error(err)
+      alert("Failed to update report")
+    } finally {
+      setSaving(false)
     }
-  }
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "critical":
-        return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-      case "high":
-        return "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
-      case "medium":
-        return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
-      case "low":
-        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-      default:
-        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
-    }
-  }
-
-  const handleUpdateReport = () => {
-    // In a real application, this would send data to a backend API
-    console.log("Updating report:", {
-      reportId: report.id,
-      newStatus,
-      actionNote,
-      assignedTo,
-      resolutionDetails,
-    })
-    alert("Report updated successfully! (Demo)")
-    router.push(`/admin/reports/${id}`) // Redirect back to report details
-  }
-
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp)
-    return date.toLocaleString()
   }
 
   return (
@@ -130,12 +244,14 @@ export default function ReportActionPage() {
                   Back to Report Details
                 </Link>
               </Button>
-              <h1 className="text-3xl font-bold">Take Action on Report #{report.id.toString().padStart(4, "0")}</h1>
+              <h1 className="text-3xl font-bold">Take Action on Report #{report.trackingCode ?? report.id}</h1>
               <p className="text-lg text-muted-foreground">{report.type}</p>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge className={getPriorityColor(report.priority)}>{report.priority} Priority</Badge>
-              <Badge className={getStatusColor(report.status)}>Current: {report.status}</Badge>
+              {/* priority badge removed as requested */}
+              <Badge className={getStatusColor(report.status)}>
+                {statusLabels[report.status] ?? statusLabels["pending-review"]}
+              </Badge>
             </div>
           </div>
 
@@ -156,11 +272,11 @@ export default function ReportActionPage() {
                   </div>
                   <div className="flex items-center space-x-2">
                     <Clock className="w-4 h-4 text-muted-foreground" />
-                    <span>{formatTimestamp(report.time)}</span>
+                    <span>{formatTimestamp(report.reportedAt)}</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <User className="w-4 h-4 text-muted-foreground" />
-                    <span>{report.reporter}</span>
+                    <span>{report.reporterName ?? "Anonymous"}</span>
                   </div>
                   <Separator />
                   <p className="line-clamp-4 text-muted-foreground">{report.description}</p>
@@ -179,7 +295,7 @@ export default function ReportActionPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {report.actionsTaken.length === 0 ? (
+                  {!report.actionsTaken || report.actionsTaken.length === 0 ? (
                     <p className="text-muted-foreground text-sm">No actions recorded yet.</p>
                   ) : (
                     <div className="space-y-3 text-sm">
@@ -187,7 +303,7 @@ export default function ReportActionPage() {
                         <div key={index} className="space-y-1">
                           <p className="font-medium">{action.action}</p>
                           <div className="text-xs text-muted-foreground">
-                            {formatTimestamp(action.timestamp)} by {action.by}
+                            {formatTimestamp(action.timestamp)}{action.by ? ` by ${action.by}` : ""}
                           </div>
                         </div>
                       ))}
@@ -282,8 +398,9 @@ export default function ReportActionPage() {
                     <Button
                       type="submit"
                       className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700"
+                      disabled={saving}
                     >
-                      Save Update
+                      {saving ? "Saving..." : "Save Update"}
                     </Button>
                   </div>
                 </form>

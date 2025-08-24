@@ -1,9 +1,9 @@
 "use client"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import {
   ArrowLeft,
@@ -15,50 +15,182 @@ import {
   Trash2,
   ExternalLink,
   Info,
+  ClipboardList,
 } from "lucide-react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
-import { ClipboardList } from "lucide-react" // Import ClipboardList
+
+type Attachment = {
+  url: string;
+  type: "image" | "video" | "audio" | "file";
+  fileType?: string;
+  name?: string;
+  uploadedAt?: string | Date;
+};
+
+type ActionTaken = {
+  timestamp: string | Date;
+  action: string;
+  by?: string;
+};
+
+type ReportShape = {
+  id: string;
+  title?: string;
+  description: string;
+  type: string;
+  location: string;
+  coordinates?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  status: "RECEIVED" | "UNDER_INVESTIGATION" | "RESOLVED" | string;
+  reportedAt: string;
+  resolvedAt?: string | null;
+  reporterName?: string | null;
+  reporterEmail?: string | null;
+  attachments: Attachment[];
+  actionsTaken: ActionTaken[];
+  trackingCode?: string;
+};
 
 export default function ReportDetailPage() {
   const params = useParams()
   const { id } = params
   const router = useRouter()
 
-  // Mock data for a single report
-  const report = {
-    id: Number(id),
-    type: "Suspicious Activity",
-    location: "Park Avenue & 5th Street, Cityville",
-    coordinates: "34.0522° N, 118.2437° W",
-    time: "2024-07-15T14:30:00Z",
-    status: "pending-review",
-    priority: "high",
-    description:
-      "A group of 3-4 individuals has been observed loitering near the park entrance for the past two hours. They appear to be exchanging small packages discreetly. One individual was seen attempting to open car doors in the adjacent parking lot. They are wearing dark hoodies and seem to be avoiding eye contact with passersby. This behavior is unusual for this area.",
-    reporter: "Anonymous User",
-    contactInfo: "N/A",
-    attachments: [
-      { type: "image", url: "/placeholder.svg?height=200&width=300", name: "suspect_photo_1.jpg" },
-      { type: "image", url: "/placeholder.svg?height=200&width=300", name: "area_photo_2.jpg" },
-      { type: "video", url: "https://example.com/video.mp4", name: "security_footage.mp4" },
-      { type: "audio", url: "https://example.com/audio.mp3", name: "witness_statement.mp3" },
-    ],
-    actionsTaken: [
-      {
-        timestamp: "2024-07-15T15:00:00Z",
-        action: "Report received and assigned to Officer Smith.",
-        by: "System",
-      },
-      {
-        timestamp: "2024-07-15T15:30:00Z",
-        action: "Officer Smith dispatched to location.",
-        by: "Officer Smith",
-      },
-    ],
-    notes:
-      "Initial assessment suggests potential drug dealing or car theft attempts. Officer advised to approach with caution.",
+  const [report, setReport] = useState<ReportShape | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // delete modal state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    if (!id) return
+    fetchReport()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  async function fetchReport() {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/reports/${id}`, { cache: "no-store" })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Unknown" }))
+        setError(err?.error || `Failed to load (status ${res.status})`)
+        setReport(null)
+        return
+      }
+      const data = await res.json()
+      // Normalise date fields to ISO strings to keep display consistent
+      if (data.reportedAt) data.reportedAt = new Date(data.reportedAt).toISOString()
+      if (data.resolvedAt) data.resolvedAt = new Date(data.resolvedAt).toISOString()
+      if (Array.isArray(data.actionsTaken)) {
+        data.actionsTaken = data.actionsTaken.map((a: any) => ({ ...a, timestamp: new Date(a.timestamp).toISOString() }))
+      }
+      setReport(data)
+    } catch (err) {
+      console.error(err)
+      setError("Failed to fetch report")
+      setReport(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const statusLabels: Record<string, string> = {
+    RECEIVED: "Received",
+    UNDER_INVESTIGATION: "Under Investigation",
+    RESOLVED: "Resolved",
+    "pending-review": "Pending Review",
+    "in-progress": "In Progress",
+    "closed": "Closed",
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "RECEIVED":
+      case "pending-review":
+        return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
+      case "UNDER_INVESTIGATION":
+      case "in-progress":
+        return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+      case "RESOLVED":
+      case "resolved":
+        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+      case "closed":
+        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
+      default:
+        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
+    }
+  }
+
+  const formatTimestamp = (timestamp?: string | Date) => {
+    if (!timestamp) return ""
+    try {
+      const d = new Date(timestamp)
+      return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+    } catch {
+      return String(timestamp)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!report) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/admin/reports/${report.id}`, { method: "DELETE" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        console.error("Delete failed", data)
+        alert(data?.error || "Failed to delete report")
+        setShowDeleteConfirm(false)
+        return
+      }
+      // success — redirect to admin dashboard
+      router.push("/admin")
+    } catch (err) {
+      console.error(err)
+      alert("Failed to delete report")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-green-50/30 pt-16">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-4xl mx-auto text-center">
+            <p className="text-muted-foreground">Loading report...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-green-50/30 pt-16">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-4xl mx-auto text-center">
+            <h1 className="text-2xl font-bold mb-4">Error</h1>
+            <p className="text-muted-foreground mb-8">{error}</p>
+            <Button asChild>
+              <Link href="/admin">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Admin Dashboard
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!report) {
@@ -81,41 +213,6 @@ export default function ReportDetailPage() {
     )
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "pending-review":
-        return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
-      case "in-progress":
-        return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-      case "resolved":
-        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-      case "closed":
-        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
-      default:
-        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
-    }
-  }
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "critical":
-        return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-      case "high":
-        return "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
-      case "medium":
-        return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
-      case "low":
-        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-      default:
-        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
-    }
-  }
-
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp)
-    return date.toLocaleString()
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-green-50/30 pt-16">
       <Navbar />
@@ -131,12 +228,14 @@ export default function ReportDetailPage() {
                   Back to Dashboard
                 </Link>
               </Button>
-              <h1 className="text-3xl font-bold">Report Details: #{report.id.toString().padStart(4, "0")}</h1>
+              <h1 className="text-3xl font-bold">Report Details: #{report.trackingCode ?? report.id}</h1>
               <p className="text-lg text-muted-foreground">{report.type}</p>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge className={getPriorityColor(report.priority)}>{report.priority} Priority</Badge>
-              <Badge className={getStatusColor(report.status)}>{report.status}</Badge>
+              {/* Priority badge removed as requested */}
+              <Badge className={getStatusColor(report.status)}>
+                {statusLabels[report.status] ?? report.status}
+              </Badge>
             </div>
           </div>
 
@@ -154,7 +253,7 @@ export default function ReportDetailPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label className="text-muted-foreground">Report ID</Label>
-                      <p className="font-medium">CRISP-{report.id.toString().padStart(4, "0")}</p>
+                      <p className="font-medium">{report.trackingCode ?? `CRISP-${report.id}`}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Report Type</Label>
@@ -166,19 +265,19 @@ export default function ReportDetailPage() {
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Coordinates</Label>
-                      <p className="font-medium">{report.coordinates}</p>
+                      <p className="font-medium">{report.coordinates ?? (report.latitude && report.longitude ? `${report.latitude}, ${report.longitude}` : "N/A")}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Time of Incident</Label>
-                      <p className="font-medium">{formatTimestamp(report.time)}</p>
+                      <p className="font-medium">{formatTimestamp(report.reportedAt)}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Reported By</Label>
-                      <p className="font-medium">{report.reporter}</p>
+                      <p className="font-medium">{report.reporterName || "Anonymous"}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Contact Info</Label>
-                      <p className="font-medium">{report.contactInfo}</p>
+                      <p className="font-medium">{report.reporterEmail ?? "N/A"}</p>
                     </div>
                   </div>
                   <Separator />
@@ -193,12 +292,12 @@ export default function ReportDetailPage() {
               <Card className="border-0 shadow-lg">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
-                    <ImageIcon className="w-5 h-5 text-purple-600" /> {/* Updated Image to ImageIcon */}
+                    <ImageIcon className="w-5 h-5 text-purple-600" />
                     <span>Attachments</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {report.attachments.length === 0 ? (
+                  {(!report.attachments || report.attachments.length === 0) ? (
                     <p className="text-muted-foreground">No attachments provided.</p>
                   ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -208,6 +307,7 @@ export default function ReportDetailPage() {
                           className="relative group aspect-video rounded-lg overflow-hidden border border-border/50"
                         >
                           {attachment.type === "image" && (
+                            // eslint-disable-next-line @next/next/no-img-element
                             <img
                               src={attachment.url || "/placeholder.svg"}
                               alt={attachment.name}
@@ -216,16 +316,23 @@ export default function ReportDetailPage() {
                           )}
                           {attachment.type === "video" && (
                             <video controls className="w-full h-full object-cover">
-                              <source src={attachment.url} type="video/mp4" />
+                              <source src={attachment.url} />
                               Your browser does not support the video tag.
                             </video>
                           )}
                           {attachment.type === "audio" && (
                             <div className="flex items-center justify-center h-full bg-muted">
                               <audio controls className="w-full max-w-[200px]">
-                                <source src={attachment.url} type="audio/mpeg" />
+                                <source src={attachment.url} />
                                 Your browser does not support the audio element.
                               </audio>
+                            </div>
+                          )}
+                          {attachment.type === "file" && (
+                            <div className="flex items-center justify-center h-full bg-muted">
+                              <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="underline">
+                                {attachment.name || "Open file"}
+                              </a>
                             </div>
                           )}
                           <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -255,7 +362,7 @@ export default function ReportDetailPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {report.actionsTaken.length === 0 ? (
+                  {(!report.actionsTaken || report.actionsTaken.length === 0) ? (
                     <p className="text-muted-foreground">No actions recorded yet.</p>
                   ) : (
                     <div className="space-y-4">
@@ -267,7 +374,7 @@ export default function ReportDetailPage() {
                           <div className="space-y-1">
                             <p className="font-medium">{action.action}</p>
                             <div className="text-sm text-muted-foreground">
-                              {formatTimestamp(action.timestamp)} by {action.by}
+                              {formatTimestamp(action.timestamp)}{action.by ? ` by ${action.by}` : ""}
                             </div>
                           </div>
                         </div>
@@ -308,29 +415,10 @@ export default function ReportDetailPage() {
                   <Button
                     variant="outline"
                     className="w-full bg-transparent text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
+                    onClick={() => setShowDeleteConfirm(true)}
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
                     Delete Report
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Internal Notes */}
-              <Card className="border-0 shadow-lg">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <MessageSquare className="w-5 h-5 text-orange-600" />
-                    <span>Internal Notes</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    placeholder="Add internal notes about this report..."
-                    defaultValue={report.notes}
-                    className="min-h-[120px]"
-                  />
-                  <Button size="sm" className="mt-3 w-full bg-orange-600 hover:bg-orange-700">
-                    Save Notes
                   </Button>
                 </CardContent>
               </Card>
@@ -349,13 +437,13 @@ export default function ReportDetailPage() {
                       <Link href="/admin/reports/2" className="text-sm hover:text-emerald-600">
                         #CRISP-0002 - Vandalism
                       </Link>
-                      <Badge className={getStatusColor("in-progress")}>In Progress</Badge>
+                      <Badge className={getStatusColor("UNDER_INVESTIGATION")}>In Progress</Badge>
                     </li>
                     <li className="flex items-center justify-between">
                       <Link href="/admin/reports/5" className="text-sm hover:text-emerald-600">
                         #CRISP-0005 - Missing Person
                       </Link>
-                      <Badge className={getStatusColor("pending-review")}>Pending Review</Badge>
+                      <Badge className={getStatusColor("RECEIVED")}>Pending Review</Badge>
                     </li>
                   </ul>
                 </CardContent>
@@ -364,6 +452,37 @@ export default function ReportDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+        >
+          <div className="fixed inset-0 bg-black/50" onClick={() => { if (!deleting) setShowDeleteConfirm(false) }} />
+          <div className="relative max-w-lg w-full bg-white dark:bg-slate-900 rounded-lg shadow-lg p-6 z-10">
+            <h3 className="text-lg font-medium">Confirm delete</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Are you sure you want to permanently delete this report? This action cannot be undone.
+            </p>
+
+            <div className="mt-6 flex justify-end space-x-3">
+              <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button className="bg-red-600 hover:bg-red-700" onClick={handleDelete} disabled={deleting}>
+                {deleting ? "Deleting..." : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2 inline-block" />
+                    Delete Report
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

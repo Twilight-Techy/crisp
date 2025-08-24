@@ -18,12 +18,6 @@ import {
   LogOut,
   CheckCircle,
   Eye,
-  BarChart,
-  Bell,
-  Mail,
-  Globe,
-  Key,
-  MessageSquare,
   ClipboardList,
   List,
 } from "lucide-react"
@@ -51,11 +45,21 @@ export default function AdminDashboardPage() {
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const limit = 10; // show 10 reports at a time
 
   const statusLabels: Record<string, string> = {
     RECEIVED: "Received",
     UNDER_INVESTIGATION: "Under Investigation",
     RESOLVED: "Resolved",
+  };
+
+  const statusUiToEnum: Record<string, string | undefined> = {
+    "pending-review": "RECEIVED",
+    "in-progress": "UNDER_INVESTIGATION",
+    "resolved": "RESOLVED",
+    "closed": "RESOLVED", // map closed -> resolved (adjust if you want different)
+    all: undefined,
   };
 
   const getStatusColor = (status: string) => {
@@ -72,21 +76,39 @@ export default function AdminDashboardPage() {
   }
 
   useEffect(() => {
-    fetchReports();
-  }, [selectedFilter, selectedStatus]);
+    // whenever filter/status/page change, fetch server-side (page reset handled in handlers)
+    fetchReports(page);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFilter, selectedStatus, page]);
 
-  async function fetchReports() {
+  async function fetchReports(pageToFetch = 1) {
     setLoading(true);
     try {
       const qs = new URLSearchParams();
       if (selectedFilter !== "all") qs.set("type", selectedFilter);
-      if (selectedStatus !== "all") qs.set("status", selectedStatus);
+      const mappedStatus = statusUiToEnum[selectedStatus];
+      if (mappedStatus) qs.set("status", mappedStatus);
       if (searchQuery) qs.set("search", searchQuery);
+      qs.set("limit", String(limit));
+      qs.set("page", String(pageToFetch));
 
       const res = await fetch(`/api/admin/reports?${qs.toString()}`, { cache: 'no-store' });
       const data = await res.json();
-      setReports(data.reports || []);
-      setTotal(data.total || 0);
+      const incoming: Report[] = data.reports || [];
+      const incomingTotal: number = data.total ?? 0;
+
+      if (pageToFetch === 1) {
+        // replace
+        setReports(incoming);
+      } else {
+        // append (avoid duplicates)
+        setReports((prev) => {
+          const ids = new Set(prev.map(r => r.id));
+          const deduped = incoming.filter(r => !ids.has(r.id));
+          return [...prev, ...deduped];
+        });
+      }
+      setTotal(incomingTotal);
     } catch (err) {
       console.error("Failed to fetch reports", err);
     } finally {
@@ -95,7 +117,14 @@ export default function AdminDashboardPage() {
   }
 
   const handleSearch = async () => {
-    await fetchReports();
+    // reset to page 1 and fetch — use effect by updating page
+    if (page !== 1) {
+      setPage(1);
+      // effect will fetch page 1
+    } else {
+      // already at page 1 — trigger fetch directly
+      fetchReports(1);
+    }
   };
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
@@ -117,9 +146,12 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Client-side fallback filtering (kept, but uses same mapping for status comparison)
+  const mappedSelectedStatus = statusUiToEnum[selectedStatus];
+
   const filteredReports = reports.filter((report) => {
     const matchesFilter = selectedFilter === "all" || report.type.toLowerCase().includes(selectedFilter.toLowerCase())
-    const matchesStatus = selectedStatus === "all" || report.status === selectedStatus
+    const matchesStatus = selectedStatus === "all" || report.status === mappedSelectedStatus
     const matchesSearch =
       searchQuery === "" ||
       report.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -133,6 +165,24 @@ export default function AdminDashboardPage() {
     localStorage.removeItem("crisp_admin_auth")
     router.push("/admin/login")
   }
+
+  const handleLoadMore = () => {
+    // only load more if we don't already have all reports
+    if (reports.length >= total) return;
+    setPage(prev => prev + 1);
+  }
+
+  const formatTimestamp = (iso?: string) => {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    } catch {
+      return iso;
+    }
+  }
+
+  const canLoadMore = reports.length < total;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-green-50/30 pt-16">
@@ -230,9 +280,14 @@ export default function AdminDashboardPage() {
                       className="pl-10"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleSearch();
+                        }
+                      }}
                     />
                   </div>
-                  <Select value={selectedFilter} onValueChange={setSelectedFilter}>
+                  <Select value={selectedFilter} onValueChange={(val) => { setSelectedFilter(val); setPage(1); }}>
                     <SelectTrigger className="w-48">
                       <Filter className="w-4 h-4 mr-2" />
                       <SelectValue placeholder="Filter by Type" />
@@ -246,7 +301,7 @@ export default function AdminDashboardPage() {
                       <SelectItem value="missing person">Missing Person</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                  <Select value={selectedStatus} onValueChange={(val) => { setSelectedStatus(val); setPage(1); }}>
                     <SelectTrigger className="w-40">
                       <List className="w-4 h-4 mr-2" />
                       <SelectValue placeholder="Filter by Status" />
@@ -289,7 +344,7 @@ export default function AdminDashboardPage() {
                           <div className="text-right text-sm text-muted-foreground">
                             <div className="flex items-center space-x-1">
                               <Clock className="w-3 h-3" />
-                              <span>{report.reportedAt}</span>
+                              <span>{formatTimestamp(report.reportedAt)}</span>
                             </div>
                           </div>
                         </div>
@@ -334,96 +389,13 @@ export default function AdminDashboardPage() {
             {/* Pagination/Load More */}
             <Card className="border-0 shadow-lg">
               <CardContent className="p-6 text-center">
-                <Button variant="outline" className="bg-transparent">
-                  Load More Reports
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Other Admin Sections (Placeholders) */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <BarChart className="w-5 h-5 text-orange-600" />
-                  <span>Analytics & Statistics</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">View detailed reports and trends.</p>
-                <Button asChild variant="outline" className="mt-4 w-full bg-transparent">
-                  <Link href="/admin/analytics">Go to Analytics</Link>
-                </Button>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Bell className="w-5 h-5 text-red-600" />
-                  <span>Alert Management</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Manage public safety alerts.</p>
-                <Button asChild variant="outline" className="mt-4 w-full bg-transparent">
-                  <Link href="/admin/alerts">Manage Alerts</Link>
-                </Button>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Mail className="w-5 h-5 text-purple-600" />
-                  <span>Communication Tools</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Send mass notifications or individual messages.</p>
-                <Button asChild variant="outline" className="mt-4 w-full bg-transparent">
-                  <Link href="/admin/communication">Communication</Link>
-                </Button>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Globe className="w-5 h-5 text-green-600" />
-                  <span>Map Configuration</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Adjust map layers and incident display.</p>
-                <Button asChild variant="outline" className="mt-4 w-full bg-transparent">
-                  <Link href="/admin/map-config">Map Settings</Link>
-                </Button>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Key className="w-5 h-5 text-amber-600" />
-                  <span>API Integrations</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Manage third-party API connections.</p>
-                <Button asChild variant="outline" className="mt-4 w-full bg-transparent">
-                  <Link href="/admin/integrations">Integrations</Link>
-                </Button>
-              </CardContent>
-            </Card>
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <MessageSquare className="w-5 h-5 text-cyan-600" />
-                  <span>Feedback & Support</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Review user feedback and provide support.</p>
-                <Button asChild variant="outline" className="mt-4 w-full bg-transparent">
-                  <Link href="/admin/feedback">Feedback</Link>
+                <Button
+                  variant="outline"
+                  className="bg-transparent"
+                  onClick={handleLoadMore}
+                  disabled={!canLoadMore || loading}
+                >
+                  {loading ? "Loading..." : canLoadMore ? "Load More Reports" : "No more reports"}
                 </Button>
               </CardContent>
             </Card>

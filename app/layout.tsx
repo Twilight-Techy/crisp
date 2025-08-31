@@ -9,7 +9,10 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "CRISP - Crime Reporting and Incident Surveillance Platform",
   description: "Anonymous crime reporting, real-time mapping, and community safety alerts",
-    generator: 'v0.dev'
+  creator: 'Twilight Techie 👑',
+  icons: {
+    icon: "/icon.png",
+  },
 }
 
 export default function RootLayout({

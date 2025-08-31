@@ -60,7 +60,7 @@ export default function MapPage() {
   const [mapView, setMapView] = useState<"2d" | "3d">("2d")
   const [filters, setFilters] = useState({
     crimeTypes: [] as string[],
-    dateRange: "7days",
+    dateRange: "30days",
     status: "all",
   })
   const [searchQuery, setSearchQuery] = useState("")

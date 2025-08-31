@@ -7,21 +7,31 @@ export async function GET(request: Request) {
 
     // parse filters
     const types = searchParams.getAll('type')        // e.g. ?type=Theft&type=Vandalism
-    const status = searchParams.get('status')    // currently unused, but you could map that to status
+    const status = searchParams.get('status')    // e.g. RECEIVED / UNDER_INVESTIGATION / RESOLVED
     const since = searchParams.get('since')          // e.g. '7days', '24hours'
 
     // build where clause
     const where: any = {}
     if (types.length > 0) {
+      // assume frontend sends canonical type strings matching DB (e.g. "Theft", "Vandalism")
         where.type = { in: types }
     }
     if (since) {
         let date = new Date()
         switch (since) {
-            case '24hours': date.setDate(date.getDate() - 1); break
-            case '7days': date.setDate(date.getDate() - 7); break
-            case '30days': date.setMonth(date.getMonth() - 1); break
-            // … add more as needed
+            case '24hours':
+                date.setDate(date.getDate() - 1)
+                break
+            case '7days':
+                date.setDate(date.getDate() - 7)
+                break
+            case '30days':
+                date.setMonth(date.getMonth() - 1)
+                break
+            case '90days':
+                date.setMonth(date.getMonth() - 3)
+                break
+            // custom: don't add filter
         }
         where.reportedAt = { gte: date }
     }
@@ -31,17 +41,18 @@ export async function GET(request: Request) {
 
     const incidents = await prisma.incidentReport.findMany({
         where,
-        select: {
-            id: true,
-            latitude: true,
-            longitude: true,
-            type: true,
-            status: true,
-            location: true,
-            reportedAt: true,
-            resolvedAt: true,
-        }
-    })
+      orderBy: { reportedAt: "desc" },
+      select: {
+          id: true,
+          latitude: true,
+          longitude: true,
+          type: true,
+          status: true,
+          location: true,
+          reportedAt: true,
+          resolvedAt: true,
+      },
+  })
 
     return NextResponse.json({ incidents })
 }

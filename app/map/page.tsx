@@ -24,10 +24,8 @@ import {
   EyeOff,
   Navigation,
   Clock,
-  TrendingUp,
 } from "lucide-react"
 import { Navbar } from "@/components/navbar"
-import { CesiumDebugInfo } from "@/components/maps/CesiumDebugInfo"
 import { formatDistanceToNow } from "date-fns"
 
 // dynamic import so MapLibre & Cesium only load in the browser:
@@ -39,11 +37,22 @@ type Incident = {
   latitude: number
   longitude: number
   type: string      // e.g. "Theft", "Vandalism", ...
-  status: string    // e.g. "UNDER_INVESTIGATION", "RESOLVED"
+  status: string    // e.g. "RECEIVED", "UNDER_INVESTIGATION", "RESOLVED"
   location: string
   reportedAt: string  // ISO timestamp
   resolvedAt?: string // ISO timestamp, optional if not resolved
 }
+
+const KNOWN_CRIME_TYPES = [
+  { id: "Theft", label: "Theft/Burglary", color: "bg-red-500" },
+  { id: "Vandalism", label: "Vandalism", color: "bg-orange-500" },
+  { id: "Assault", label: "Assault", color: "bg-red-600" },
+  { id: "Drug", label: "Drug Activity", color: "bg-purple-500" },
+  { id: "Suspicious", label: "Suspicious", color: "bg-yellow-500" },
+  { id: "Noise", label: "Noise Complaint", color: "bg-blue-500" },
+  { id: "Traffic", label: "Traffic Violation", color: "bg-green-500" },
+  { id: "Other", label: "Other", color: "bg-gray-500" },
+]
 
 export default function MapPage() {
   // UI state
@@ -57,6 +66,24 @@ export default function MapPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [searchCoords, setSearchCoords] = useState<[number, number] | null>(null)
   const [incidents, setIncidents] = useState<Incident[]>([])
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null) // [lon, lat]
+
+  // ask for user location on mount (center maps to user by default if allowed)
+  useEffect(() => {
+    if (!("geolocation" in navigator)) return
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude
+        const lon = pos.coords.longitude
+        setUserLocation([lon, lat])
+      },
+      (err) => {
+        console.info("User denied geolocation or it failed:", err)
+      },
+      { timeout: 5000 }
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 1️⃣ Fetch from your incidents API whenever `filters` change
   useEffect(() => {
@@ -64,35 +91,44 @@ export default function MapPage() {
     filters.crimeTypes.forEach(t => qs.append("type", t))
     qs.set("since", filters.dateRange)
 
-    if (filters.status !== "all") {
+    if (filters.status && filters.status !== "all") {
       qs.set("status", filters.status)
     }
 
-    fetch(`/api/incidents?${qs}`)
+    fetch(`/api/incidents?${qs.toString()}`)
       .then(r => r.json())
-      .then(({ incidents }) => setIncidents(incidents))
-      .catch(console.error)
+      .then(({ incidents }) => {
+        // normalize types (trim) and ensure coordinates are numbers
+        const normalized = (incidents || []).map((i: any) => ({
+          ...i,
+          type: String(i.type || "Other").trim(),
+          latitude: Number(i.latitude),
+          longitude: Number(i.longitude),
+          reportedAt: i.reportedAt,
+          resolvedAt: i.resolvedAt,
+        })).filter((i: any) => !Number.isNaN(i.latitude) && !Number.isNaN(i.longitude))
+        setIncidents(normalized)
+      })
+      .catch((e) => {
+        console.error("Failed to fetch incidents", e)
+      })
   }, [filters])
 
   // 2️⃣ Derive sidebar data from `incidents`
   const crimeTypesWithCounts = useMemo(() => {
-    // first, count per type
+    // count per type case-insensitively
     const counts: Record<string, number> = {}
     incidents.forEach(i => {
-      const t = i.type.toLowerCase()
-      counts[t] = (counts[t] || 0) + 1
+      const key = (i.type || "Other").toString().trim()
+      counts[key] = (counts[key] || 0) + 1
     })
-    // then map to your display structure
-    return [
-      { id: "Theft", label: "Theft/Burglary", color: "bg-red-500", count: counts["Theft"] || 0 },
-      { id: "Vandalism", label: "Vandalism", color: "bg-orange-500", count: counts["Vandalism"] || 0 },
-      { id: "Assault", label: "Assault", color: "bg-red-600", count: counts["Assault"] || 0 },
-      { id: "Drug", label: "Drug Activity", color: "bg-purple-500", count: counts["Drug"] || 0 },
-      { id: "Suspicious", label: "Suspicious", color: "bg-yellow-500", count: counts["Suspicious"] || 0 },
-      { id: "Noise", label: "Noise Complaint", color: "bg-blue-500", count: counts["Noise"] || 0 },
-      { id: "Traffic", label: "Traffic Violation", color: "bg-green-500", count: counts["Traffic"] || 0 },
-      { id: "Other", label: "Other", color: "bg-gray-500", count: counts["Other"] || 0 },
-    ]
+
+    return KNOWN_CRIME_TYPES.map(t => ({
+      id: t.id,
+      label: t.label,
+      color: t.color,
+      count: counts[t.id] || 0,
+    }))
   }, [incidents])
 
   const mapStats = useMemo(() => ({
@@ -100,15 +136,14 @@ export default function MapPage() {
     activeAlerts: incidents.filter(i => i.status !== "RESOLVED").length,
     resolvedToday: incidents.filter(i => {
       if (i.status !== "RESOLVED" || !i.resolvedAt) return false
-      // compare reportedAt or resolvedAt date to today
       const d = new Date(i.resolvedAt)
       const today = new Date()
       return d.toDateString() === today.toDateString()
     }).length,
-    responseTime: "8 min", // you could derive this if you have timestamps
+    responseTime: "8 min", // placeholder; derive if you have timestamps
   }), [incidents])
 
-  const statusLabels: Record<Incident["status"], string> = {
+  const statusLabels: Record<string, string> = {
     RECEIVED: "Received",
     UNDER_INVESTIGATION: "Under Investigation",
     RESOLVED: "Resolved",
@@ -117,9 +152,9 @@ export default function MapPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "RECEIVED":
-        return "bg-red-100 text-red-700 dark:bg-red-800/30 dark:text-red-300"
-      case "UNDER_INVESTIGATION":
         return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
+      case "UNDER_INVESTIGATION":
+        return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
       case "RESOLVED":
         return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
       default:
@@ -132,17 +167,17 @@ export default function MapPage() {
       .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime())
       .slice(0, 3)
       .map(i => {
-        const typeInfo = crimeTypesWithCounts.find(ct => ct.id === i.type.toLowerCase())
+        const typeMapping = KNOWN_CRIME_TYPES.find(ct => ct.id.toLowerCase() === i.type.toLowerCase())
         return {
           id: i.id,
-          type: typeInfo?.label ?? i.type,
+          type: typeMapping?.label ?? i.type,
           location: i.location,
           time: formatDistanceToNow(new Date(i.reportedAt), { addSuffix: true }),
-          status: statusLabels[i.status as Incident["status"]],
+          status: statusLabels[i.status] ?? i.status,
           statusColor: getStatusColor(i.status),
         }
       })
-  }, [incidents, crimeTypesWithCounts])
+  }, [incidents])
 
   const toggleCrimeType = (id: string) =>
     setFilters(f => ({
@@ -152,52 +187,33 @@ export default function MapPage() {
         : [...f.crimeTypes, id],
     }))
 
-  // Handle geocoding using MapTiler
-  // Add this to your main component to debug the search handling
+  // Geocode search via MapTiler
   const handleSearch = async () => {
     if (!searchQuery) return
-
-    console.log("🔍 Searching for:", searchQuery)
 
     try {
       const res = await fetch(
         `https://api.maptiler.com/geocoding/${encodeURIComponent(searchQuery)}.json?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}`
       )
       const data = await res.json()
-
-      console.log("📍 Geocoding response:", data)
-
       const coords = data.features?.[0]?.center
-      if (coords) {
-        console.log("✅ Found coordinates:", coords, "Type:", typeof coords[0], typeof coords[1])
-
-        // Ensure coordinates are numbers
+      if (coords && coords.length >= 2) {
         const lon = Number(coords[0])
         const lat = Number(coords[1])
-
         if (!isNaN(lon) && !isNaN(lat)) {
-          console.log("🎯 Setting search coordinates:", [lon, lat])
-          setSearchCoords([lon, lat]) // [lon, lat] format
+          // Map components expect [lon, lat]
+          setSearchCoords([lon, lat])
         } else {
-          console.error("Invalid coordinates:", { lon, lat })
-          alert("Invalid coordinates returned from geocoding service.")
+          alert("Location not found.")
         }
       } else {
-        console.log("❌ No coordinates found in response")
         alert("Location not found.")
       }
     } catch (error) {
-      console.error("❌ Geocoding error:", error)
+      console.error("Geocoding error:", error)
       alert("Error searching for location.")
     }
   }
-
-  // Also add this useEffect to your main component to monitor searchCoords changes
-  useEffect(() => {
-    if (searchCoords) {
-      console.log("🔄 searchCoords updated:", searchCoords, "Map view:", mapView)
-    }
-  }, [searchCoords, mapView])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-green-50/30">
@@ -308,7 +324,7 @@ export default function MapPage() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="RECEIVED">Recieved</SelectItem>
+                  <SelectItem value="RECEIVED">Received</SelectItem>
                   <SelectItem value="UNDER_INVESTIGATION">Under Investigation</SelectItem>
                   <SelectItem value="RESOLVED">Resolved</SelectItem>
                 </SelectContent>
@@ -374,7 +390,23 @@ export default function MapPage() {
             <Button variant="outline" size="sm" className="bg-background/80 backdrop-blur-sm">
               <Download className="w-4 h-4 mr-2" /> Export Data
             </Button>
-            <Button variant="outline" size="sm" className="bg-background/80 backdrop-blur-sm">
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-background/80 backdrop-blur-sm"
+              onClick={() => {
+                if (userLocation) {
+                  setSearchCoords(userLocation) // center map to user location
+                } else {
+                  if ("geolocation" in navigator) {
+                    navigator.geolocation.getCurrentPosition(
+                      (pos) => setUserLocation([pos.coords.longitude, pos.coords.latitude]),
+                      () => alert("Unable to determine your location.")
+                    )
+                  }
+                }
+              }}
+            >
               <Navigation className="w-4 h-4 mr-2" /> My Location
             </Button>
           </div>
@@ -382,13 +414,12 @@ export default function MapPage() {
           {/* Map Instance - with better container */}
           <div className="absolute inset-0" style={{ top: 0, left: 0, right: 0, bottom: 0 }}>
             {mapView === "2d" ? (
-              <MapLibreMap incidents={incidents} searchCoords={searchCoords} />
+              <MapLibreMap incidents={incidents} searchCoords={searchCoords} userLocation={userLocation} />
             ) : (
-                <CesiumMap incidents={incidents} searchCoords={searchCoords} />
+                <CesiumMap incidents={incidents} searchCoords={searchCoords} userLocation={userLocation} />
             )}
           </div>
         </div>
-        {/* <CesiumDebugInfo searchCoords={searchCoords} mapView={mapView} /> */}
       </div>
     </div>
   )

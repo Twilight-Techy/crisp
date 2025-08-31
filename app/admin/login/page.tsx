@@ -25,18 +25,46 @@ export default function AdminLoginPage() {
     setIsLoading(true)
     setError("")
 
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
 
-    // Demo credentials
-    if (email === "admin@crisp.com" && password === "admin123") {
-      localStorage.setItem("crisp_admin_auth", "true")
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setError(data?.error || `Login failed (status ${res.status})`)
+        setIsLoading(false)
+        return
+      }
+
+      // store token in localStorage (existing logout clears this key)
+      // keep backward-compatible simple string value
+      if (data?.token) {
+        localStorage.setItem("crisp_admin_auth", data.token)
+      } else {
+        localStorage.setItem("crisp_admin_auth", "true")
+      }
+
+      // optionally keep admin metadata if you want later
+      if (data?.admin) {
+        try {
+          localStorage.setItem("crisp_admin_profile", JSON.stringify(data.admin))
+        } catch {
+          // ignore storage failures
+        }
+      }
+
+      // redirect to admin dashboard
       router.push("/admin")
-    } else {
-      setError("Invalid email or password. Use admin@crisp.com / admin123 for demo.")
+    } catch (err) {
+      console.error("Login error:", err)
+      setError("Failed to sign in. Please try again.")
+    } finally {
+      setIsLoading(false)
     }
-
-    setIsLoading(false)
   }
 
   return (

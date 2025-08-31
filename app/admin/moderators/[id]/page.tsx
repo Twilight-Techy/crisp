@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -19,96 +19,122 @@ export default function EditModeratorPage() {
   const { id } = params
   const router = useRouter()
 
-  // Mock data for a single moderator
-  const [moderator, setModerator] = useState({
-    id: Number(id),
-    name: "Alice Johnson",
-    email: "alice.j@crisp.com",
-    role: "Moderator",
-    contact: "(555) 111-2222",
-    area: "Downtown District",
-    status: "Active",
-  })
-
-  const [fullName, setFullName] = useState(moderator.name)
-  const [email, setEmail] = useState(moderator.email)
-  const [role, setRole] = useState(moderator.role)
-  const [contactNumber, setContactNumber] = useState(moderator.contact)
-  const [assignedArea, setAssignedArea] = useState(moderator.area)
-  const [isActive, setIsActive] = useState(moderator.status === "Active")
-  const [isLoading, setIsLoading] = useState(false)
-  const [successMessage, setSuccessMessage] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
+
+  // form state
+  const [fullName, setFullName] = useState("")
+  const [email, setEmail] = useState("")
+  const [role, setRole] = useState("Moderator") // friendly label
+  const [contactNumber, setContactNumber] = useState("")
+  const [assignedArea, setAssignedArea] = useState("")
+  const [isActive, setIsActive] = useState(true) // UI-only (not persisted because schema lacks a status field)
 
   useEffect(() => {
-    // In a real app, fetch moderator data based on ID
-    // For demo, we use the mock data directly
-    if (Number(id) !== moderator.id) {
-      // Simulate fetching different moderator if ID changes
-      setModerator({
-        id: Number(id),
-        name: `Moderator ${id}`,
-        email: `mod${id}@crisp.com`,
-        role: "Moderator",
-        contact: "(555) 000-0000",
-        area: "Unknown",
-        status: "Active",
-      })
+    if (!id) return
+    fetchModerator()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  async function fetchModerator() {
+    setLoading(true)
+    setErrorMessage("")
+    try {
+      const res = await fetch(`/api/admin/moderators/${id}`, { cache: "no-store" })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setErrorMessage(err?.error || `Failed to load (status ${res.status})`)
+        setLoading(false)
+        return
+      }
+      const data = await res.json()
+      const admin = data?.admin
+      if (!admin) {
+        setErrorMessage("Moderator not found")
+        setLoading(false)
+        return
+      }
+
+      setFullName(admin.fullName ?? "")
+      setEmail(admin.email ?? "")
+      // map enum role -> friendly label
+      const friendlyRole = admin.role === "ADMIN" ? "Administrator" : admin.role === "ANALYST" ? "Analyst" : "Moderator"
+      setRole(friendlyRole)
+      setContactNumber(admin.contactNumber ?? "")
+      setAssignedArea(admin.assignedArea ?? "")
+      // keep isActive true by default (schema has no field)
+      setIsActive(true)
+    } catch (err) {
+      console.error("Failed to fetch moderator", err)
+      setErrorMessage("Failed to fetch moderator")
+    } finally {
+      setLoading(false)
     }
-  }, [id, moderator.id])
+  }
 
   const handleUpdateModerator = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
+    setIsSubmitting(true)
     setSuccessMessage("")
     setErrorMessage("")
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-
-    // In a real app, send updated data to backend
-    console.log({
-      id: moderator.id,
-      fullName,
-      email,
-      role,
-      contactNumber,
-      assignedArea,
-      status: isActive ? "Active" : "Inactive",
-    })
-
-    if (Math.random() > 0.1) {
-      // Simulate 90% success rate
-      setSuccessMessage("Moderator updated successfully! (Demo)")
-      setModerator({
-        ...moderator,
-        name: fullName,
-        email,
-        role,
-        contact: contactNumber,
-        area: assignedArea,
-        status: isActive ? "Active" : "Inactive",
-      })
-    } else {
-      setErrorMessage("Failed to update moderator. Please try again. (Demo Error)")
+    // basic client validation
+    if (!fullName.trim() || !email.trim()) {
+      setErrorMessage("Full name and email are required.")
+      setIsSubmitting(false)
+      return
     }
-    setIsLoading(false)
+
+    try {
+      // map friendly role -> server enum-friendly value (server maps strings but do this for clarity)
+      const payloadRole = role === "Administrator" ? "Administrator" : role === "Analyst" ? "Analyst" : "Moderator"
+
+      const payload: any = {
+        fullName: fullName.trim(),
+        email: email.trim(),
+        role: payloadRole,
+        contactNumber: contactNumber || null,
+        assignedArea: assignedArea || null,
+        // NOTE: isActive is a UI-only switch (not persisted because DB doesn't have it). If you add isActive to schema later, include it here.
+      }
+
+      const res = await fetch(`/api/admin/moderators/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setErrorMessage(data?.error || `Failed to update moderator (status ${res.status})`)
+        setIsSubmitting(false)
+        return
+      }
+
+      setSuccessMessage("Moderator updated successfully.")
+      // keep the UI state updated
+      // optionally redirect back to list after a short delay
+      setTimeout(() => {
+        router.push("/admin/moderators")
+      }, 800)
+    } catch (err) {
+      console.error("Update failed", err)
+      setErrorMessage("Failed to update moderator.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  if (!moderator) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-green-50/30 pt-16">
         <Navbar />
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-2xl font-bold mb-4">Moderator Not Found</h1>
-            <p className="text-muted-foreground mb-8">The moderator you're looking for doesn't exist.</p>
-            <Button asChild>
-              <Link href="/admin/moderators">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Manage Moderators
-              </Link>
-            </Button>
+            <p className="text-muted-foreground">Loading moderator...</p>
           </div>
         </div>
       </div>
@@ -130,8 +156,8 @@ export default function EditModeratorPage() {
                   Back to Manage Moderators
                 </Link>
               </Button>
-              <h1 className="text-3xl font-bold">Edit Moderator: {moderator.name}</h1>
-              <p className="text-lg text-muted-foreground">Update details for moderator #{moderator.id}</p>
+              <h1 className="text-3xl font-bold">Edit Moderator</h1>
+              <p className="text-lg text-muted-foreground">Update details for moderator #{id}</p>
             </div>
           </div>
 
@@ -247,9 +273,9 @@ export default function EditModeratorPage() {
                   <Button
                     type="submit"
                     className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700"
-                    disabled={isLoading}
+                    disabled={isSubmitting}
                   >
-                    {isLoading ? "Updating..." : "Save Changes"}
+                    {isSubmitting ? "Updating..." : "Save Changes"}
                   </Button>
                 </div>
               </form>

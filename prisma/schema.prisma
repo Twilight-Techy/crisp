@@ -114,3 +114,21 @@ model CommunityStat {
   crimeReductionPercent Float
   generatedAt          DateTime @default(now())
 }
+
+enum AdminRole {
+  MODERATOR
+  ADMIN
+  ANALYST
+}
+
+model Admin {
+  id            String    @id @default(cuid())
+  fullName      String
+  email         String    @unique
+  passwordHash  String
+  role          AdminRole @default(MODERATOR)
+  contactNumber String?
+  assignedArea  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}

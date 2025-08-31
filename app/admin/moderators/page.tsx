@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -9,56 +9,89 @@ import { ArrowLeft, Search, PlusCircle, Edit, Trash2, Mail, Phone, MapPin, Shiel
 import Link from "next/link"
 import { Navbar } from "@/components/navbar"
 
+type Moderator = {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+  contactNumber?: string | null;
+  assignedArea?: string | null;
+  createdAt?: string;
+}
+
 export default function ManageModeratorsPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [moderators, setModerators] = useState<Moderator[]>([])
+  const [loading, setLoading] = useState(false)
+  const [total, setTotal] = useState<number | null>(null)
+  const mounted = useRef(true)
 
-  // Mock data for moderators
-  const [moderators, setModerators] = useState([
-    {
-      id: 1,
-      name: "Alice Johnson",
-      email: "alice.j@crisp.com",
-      role: "Moderator",
-      contact: "(555) 111-2222",
-      area: "Downtown District",
-      status: "Active",
-    },
-    {
-      id: 2,
-      name: "Bob Williams",
-      email: "bob.w@crisp.com",
-      role: "Analyst",
-      contact: "(555) 333-4444",
-      area: "North Sector",
-      status: "Active",
-    },
-    {
-      id: 3,
-      name: "Charlie Brown",
-      email: "charlie.b@crisp.com",
-      role: "Administrator",
-      contact: "(555) 555-6666",
-      area: "All",
-      status: "Active",
-    },
-    {
-      id: 4,
-      name: "Diana Prince",
-      email: "diana.p@crisp.com",
-      role: "Moderator",
-      contact: "(555) 777-8888",
-      area: "South Sector",
-      status: "Inactive",
-    },
-  ])
+  const [page, setPage] = useState(1)
+  const limit = 10
 
-  const filteredModerators = moderators.filter(
-    (mod) =>
-      mod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      mod.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      mod.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      mod.area.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  useEffect(() => {
+    mounted.current = true
+    // initial load
+    fetchModerators(1, false)
+    return () => { mounted.current = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // debounce search: reset to page 1 and fetch fresh results
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPage(1)
+      fetchModerators(1, false)
+    }, 350)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery])
+
+  async function fetchModerators(pageToFetch = 1, append = false) {
+    setLoading(true)
+    try {
+      const qs = new URLSearchParams()
+      if (searchQuery) qs.set("search", searchQuery)
+      qs.set("limit", String(limit))
+      qs.set("page", String(pageToFetch))
+
+      const res = await fetch(`/api/admin/moderators?${qs.toString()}`, { cache: "no-store" })
+      if (!res.ok) {
+        console.error("Failed to fetch moderators", res.status)
+        if (!append) setModerators([])
+        setTotal(null)
+        return
+      }
+      const data = await res.json()
+      const incoming: Moderator[] = (data.moderators || []).map((m: any) => ({
+        id: m.id,
+        fullName: m.fullName,
+        email: m.email,
+        role: m.role === "ADMIN" ? "Administrator" : m.role === "ANALYST" ? "Analyst" : "Moderator",
+        contactNumber: m.contactNumber ?? "",
+        assignedArea: m.assignedArea ?? "",
+        createdAt: m.createdAt,
+      }))
+
+      if (append) {
+        setModerators((prev) => {
+          const ids = new Set(prev.map((p) => p.id))
+          const deduped = incoming.filter((i) => !ids.has(i.id))
+          return [...prev, ...deduped]
+        })
+      } else {
+        setModerators(incoming)
+      }
+
+      setTotal(typeof data.total === "number" ? data.total : null)
+    } catch (err) {
+      console.error("Failed to fetch moderators", err)
+      if (!append) setModerators([])
+      setTotal(null)
+    } finally {
+      if (mounted.current) setLoading(false)
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -71,12 +104,43 @@ export default function ManageModeratorsPage() {
     }
   }
 
-  const handleDeleteModerator = (id: number) => {
-    if (window.confirm("Are you sure you want to delete this moderator? This action cannot be undone.")) {
-      setModerators(moderators.filter((mod) => mod.id !== id))
-      alert("Moderator deleted successfully! (Demo)")
+  const handleDeleteModerator = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this moderator? This action cannot be undone.")) return;
+
+    try {
+      const res = await fetch(`/api/admin/moderators/${id}`, { method: "DELETE" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        console.error("Delete failed", data)
+        alert(data?.error || `Failed to delete moderator (status ${res.status})`)
+        return
+      }
+
+      // remove locally
+      setModerators((prev) => prev.filter((m) => m.id !== id))
+      alert("Moderator deleted successfully.")
+    } catch (err) {
+      console.error("Delete failed", err)
+      alert("Failed to delete moderator.")
     }
   }
+
+  const handleLoadMore = () => {
+    if (total !== null && moderators.length >= total) return
+    const next = page + 1
+    setPage(next)
+    fetchModerators(next, true)
+  }
+
+  const canLoadMore = total !== null && moderators.length < total
+
+  // client-side filtered view (keeps the UI responsive if API returns a broader set)
+  const filteredModerators = moderators.filter((mod) =>
+    mod.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    mod.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    mod.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (mod.assignedArea ?? "").toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-green-50/30 pt-16">
@@ -124,10 +188,10 @@ export default function ManageModeratorsPage() {
 
           {/* Moderators List */}
           <div className="space-y-4">
-            {filteredModerators.length === 0 ? (
+            {(!filteredModerators || filteredModerators.length === 0) ? (
               <Card className="border-0 shadow-lg">
                 <CardContent className="p-6 text-center text-muted-foreground">
-                  No moderators found matching your criteria.
+                  {loading ? "Loading moderators..." : "No moderators found matching your criteria."}
                 </CardContent>
               </Card>
             ) : (
@@ -139,12 +203,12 @@ export default function ManageModeratorsPage() {
                         <div className="flex items-center space-x-3">
                           <User className="w-6 h-6 text-emerald-600" />
                           <div>
-                            <h3 className="text-lg font-semibold">{mod.name}</h3>
+                            <h3 className="text-lg font-semibold">{mod.fullName}</h3>
                             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                               <Mail className="w-3 h-3" />
                               <span>{mod.email}</span>
                               <Phone className="w-3 h-3 ml-2" />
-                              <span>{mod.contact}</span>
+                              <span>{mod.contactNumber ?? "-"}</span>
                             </div>
                           </div>
                         </div>
@@ -161,9 +225,9 @@ export default function ManageModeratorsPage() {
                             className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
                           >
                             <MapPin className="w-3 h-3 mr-1" />
-                            {mod.area}
+                            {mod.assignedArea ?? "—"}
                           </Badge>
-                          <Badge className={getStatusColor(mod.status)}>{mod.status}</Badge>
+                          <Badge className={getStatusColor("Active")}>Active</Badge>
                         </div>
                       </div>
                       <div className="flex space-x-2">
@@ -188,8 +252,13 @@ export default function ManageModeratorsPage() {
           {/* Pagination/Load More */}
           <Card className="border-0 shadow-lg">
             <CardContent className="p-6 text-center">
-              <Button variant="outline" className="bg-transparent">
-                Load More Moderators
+              <Button
+                variant="outline"
+                className="bg-transparent"
+                onClick={handleLoadMore}
+                disabled={!canLoadMore || loading}
+              >
+                {loading ? "Loading..." : canLoadMore ? "Load More Moderators" : "No more moderators"}
               </Button>
             </CardContent>
           </Card>

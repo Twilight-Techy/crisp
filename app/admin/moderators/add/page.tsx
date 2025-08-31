@@ -36,15 +36,40 @@ export default function AddModeratorPage() {
       return
     }
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    // Basic client-side validation
+    if (!fullName.trim() || !email.trim() || !password) {
+      setErrorMessage("Full name, email and password are required.")
+      setIsLoading(false)
+      return
+    }
 
-    // In a real app, send data to backend
-    console.log({ fullName, email, role, contactNumber, assignedArea })
+    try {
+      const payload = {
+        fullName: fullName.trim(),
+        email: email.trim(),
+        password,
+        role: role || "moderator",
+        contactNumber: contactNumber || undefined,
+        assignedArea: assignedArea || undefined,
+      }
 
-    if (Math.random() > 0.2) {
-      // Simulate 80% success rate
-      setSuccessMessage("Moderator added successfully! (Demo)")
+      const res = await fetch("/api/admin/moderators", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        // show server error message if present
+        setErrorMessage(data?.error || `Failed to add moderator (status ${res.status})`)
+        setIsLoading(false)
+        return
+      }
+
+      // success
+      setSuccessMessage("Moderator added successfully.")
       setFullName("")
       setEmail("")
       setPassword("")
@@ -52,10 +77,12 @@ export default function AddModeratorPage() {
       setRole("")
       setContactNumber("")
       setAssignedArea("")
-    } else {
-      setErrorMessage("Failed to add moderator. Please try again. (Demo Error)")
+    } catch (err) {
+      console.error("Add moderator failed:", err)
+      setErrorMessage("Failed to add moderator. Please try again.")
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
   }
 
   return (

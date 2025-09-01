@@ -6,7 +6,8 @@ import {
     Ion,
     createWorldTerrainAsync,
     Cartesian3,
-    Color
+    Color,
+    HeightReference,
 } from "cesium"
 import "cesium/Build/Cesium/Widgets/widgets.css"
 
@@ -57,197 +58,239 @@ export default function CesiumMap({
     }, [])
 
     useEffect(() => {
-      (window as any).CESIUM_BASE_URL = "/cesium/"
+        (window as any).CESIUM_BASE_URL = "/cesium/"
 
-      let mounted = true
+        let mounted = true
 
-      async function initCesium() {
-          if (!container.current || viewerRef.current || !mounted) return
+        async function initCesium() {
+            if (!container.current || viewerRef.current || !mounted) return
 
-        try {
-          ensureContainerSize()
-          await new Promise(resolve => requestAnimationFrame(resolve))
-          if (!mounted) return
+            try {
+                ensureContainerSize()
+                await new Promise((resolve) => requestAnimationFrame(resolve))
+                if (!mounted) return
 
-          Ion.defaultAccessToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN!
+                Ion.defaultAccessToken = process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN!
 
-          const terrainProvider = await createWorldTerrainAsync()
-          if (!mounted) return
+                const terrainProvider = await createWorldTerrainAsync()
+                if (!mounted) return
 
-          const viewer = new Viewer(container.current, {
-              terrainProvider,
-              baseLayerPicker: true,
-              geocoder: true,
-              homeButton: false,
-              sceneModePicker: false,
-              timeline: false,
-              animation: false,
-              fullscreenButton: true,
-              vrButton: false,
-              navigationHelpButton: true,
-              navigationInstructionsInitiallyVisible: false,
-          })
+                const viewer = new Viewer(container.current, {
+                    terrainProvider,
+                    baseLayerPicker: true,
+                    geocoder: true,
+                    homeButton: false,
+                    sceneModePicker: false,
+                    timeline: false,
+                    animation: false,
+                    fullscreenButton: true,
+                    vrButton: false,
+                    navigationHelpButton: true,
+                    navigationInstructionsInitiallyVisible: false,
+                })
 
-          viewerRef.current = viewer
-              ; (window as any).cesiumViewer = viewer
+                viewerRef.current = viewer
+                    ; (window as any).cesiumViewer = viewer
 
-          // wait until canvas has size
-          const checkReady = () => {
-              if (!mounted || !viewerRef.current) return
-            const canvas = viewer.scene.canvas
-            if (canvas.clientWidth > 0 && canvas.clientHeight > 0) {
-              viewer.resize()
-              isViewerReady.current = true
-              // center either at user location or a default
-              if (userLocation) {
-                  const [lon, lat] = userLocation
-                  viewer.camera.setView({
-                  destination: Cartesian3.fromDegrees(lon, lat, 15000),
-              })
-            } else {
-                    viewer.camera.setView({
-                        destination: Cartesian3.fromDegrees(-74.0, 40.7, 15000), // default area
-                    })
+                // Make sure labels/points render on top of terrain correctly
+                // (optional but helps on some devices)
+                try {
+                    viewer.scene.globe.depthTestAgainstTerrain = true
+                } catch (e) {
+                    // ignore if not available
                 }
-            } else {
-                setTimeout(checkReady, 50)
+
+                // wait until canvas has size
+                const checkReady = () => {
+                    if (!mounted || !viewerRef.current) return
+                    const canvas = viewer.scene.canvas
+                    if (canvas.clientWidth > 0 && canvas.clientHeight > 0) {
+                        viewer.resize()
+                        isViewerReady.current = true
+
+                        // center either at user location or a default
+                        if (userLocation) {
+                            const [lon, lat] = userLocation
+                            viewer.camera.setView({
+                                destination: Cartesian3.fromDegrees(lon, lat, 15000),
+                            })
+                        } else {
+                            viewer.camera.setView({
+                                destination: Cartesian3.fromDegrees(-74.0, 40.7, 15000), // default area
+                            })
+                        }
+                    } else {
+                        setTimeout(checkReady, 50)
+                    }
+                }
+                setTimeout(checkReady, 100)
+            } catch (error) {
+                console.error("Failed to initialize Cesium:", error)
+                isViewerReady.current = false
             }
         }
-          setTimeout(checkReady, 100)
-        } catch (error) {
-            console.error("Failed to initialize Cesium:", error)
+
+        initCesium()
+
+        return () => {
+            mounted = false
             isViewerReady.current = false
+            if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+                try {
+                    viewerRef.current.destroy()
+                } catch (e) {
+                    console.warn("Error destroying Cesium viewer:", e)
+                }
+            }
+            viewerRef.current = undefined
         }
-    }
-
-      initCesium()
-
-      return () => {
-          mounted = false
-          isViewerReady.current = false
-          if (viewerRef.current && !viewerRef.current.isDestroyed()) {
-              try {
-                  viewerRef.current.destroy()
-              } catch (e) {
-                  console.warn("Error destroying Cesium viewer:", e)
-              }
-          }
-          viewerRef.current = undefined
-      }
-  }, [ensureContainerSize, userLocation])
+    }, [ensureContainerSize, userLocation])
 
     // Add incident entities whenever incidents change
     useEffect(() => {
         const viewer = viewerRef.current
         if (!viewer || !isViewerReady.current) return
 
-      // remove old incident entities (but keep other entities if required)
-      // here we will remove entities we created by id (we use inc.id as entity id)
-      incidents.forEach((inc) => {
-          // remove existing same id if any
-          try { viewer.entities.removeById(inc.id) } catch { /* ignore */ }
-      })
+        // Defensive: ignore empty coords or invalid numbers
+        const validIncidents = incidents.filter(
+            (i) =>
+                typeof i.latitude === "number" &&
+                typeof i.longitude === "number" &&
+                isFinite(i.latitude) &&
+                isFinite(i.longitude)
+        )
 
-      incidents.forEach((inc) => {
-        const col = rawColorMap[inc.type.toLowerCase()] ?? Color.GRAY
-        viewer.entities.add({
-            id: inc.id,
-            position: Cartesian3.fromDegrees(inc.longitude, inc.latitude, 0),
-            point: {
-              pixelSize: 12,
-              color: col,
-              outlineColor: Color.BLACK,
-              outlineWidth: 1,
-          },
-          description: `<div><strong>${inc.type}</strong><div>${inc.location ?? ''}</div><div style="font-size:12px">${inc.reportedAt ? new Date(inc.reportedAt).toLocaleString() : ''}</div></div>`,
-      })
-    })
+        // Remove existing entities with same ids, then add fresh ones
+        validIncidents.forEach((inc) => {
+            try {
+                viewer.entities.removeById(inc.id)
+            } catch {
+                /* ignore */
+            }
+        })
 
-      // Optionally zoom to fit incidents if user hasn't chosen a location
-      if (!userLocation && incidents.length > 0) {
-          const lons = incidents.map(i => i.longitude)
-          const lats = incidents.map(i => i.latitude)
-          const minLon = Math.min(...lons), maxLon = Math.max(...lons)
-          const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-          const west = Cartesian3.fromDegrees(minLon, minLat)
-          const east = Cartesian3.fromDegrees(maxLon, maxLat)
-          // try to set camera to center of bounding box with some offset
-          const centerLon = (minLon + maxLon) / 2
-          const centerLat = (minLat + maxLat) / 2
-          viewer.camera.setView({ destination: Cartesian3.fromDegrees(centerLon, centerLat, 15000) })
-      }
-  }, [incidents, userLocation])
+        validIncidents.forEach((inc) => {
+            const col = rawColorMap[inc.type.toLowerCase()] ?? Color.GRAY
+            // Put a small altitude (5 meters) and RELATIVE_TO_GROUND so the point sits slightly above terrain
+            const altitudeMeters = 5
+            viewer.entities.add({
+                id: inc.id,
+                position: Cartesian3.fromDegrees(inc.longitude, inc.latitude, altitudeMeters),
+                point: {
+                    pixelSize: 16, // slightly larger so it's visible
+                    color: col,
+                    outlineColor: Color.BLACK,
+                    outlineWidth: 1,
+                    heightReference: HeightReference.RELATIVE_TO_GROUND,
+                },
+                description: `<div><strong>${inc.type}</strong><div>${inc.location ?? ""}</div><div style="font-size:12px">${inc.reportedAt ? new Date(inc.reportedAt).toLocaleString() : ""}</div></div>`,
+            })
+        })
+
+        // Force a render to make sure entities appear right away
+        try {
+            viewer.scene.requestRender()
+        } catch {
+            // ignore
+        }
+
+        // Optionally zoom to fit incidents if user hasn't chosen a location
+        if (!userLocation && validIncidents.length > 0) {
+            const lons = validIncidents.map((i) => i.longitude)
+            const lats = validIncidents.map((i) => i.latitude)
+            const minLon = Math.min(...lons),
+                maxLon = Math.max(...lons)
+            const minLat = Math.min(...lats),
+                maxLat = Math.max(...lats)
+            const centerLon = (minLon + maxLon) / 2
+            const centerLat = (minLat + maxLat) / 2
+            viewer.camera.setView({ destination: Cartesian3.fromDegrees(centerLon, centerLat, 15000) })
+        }
+    }, [incidents, userLocation])
 
     // add or update user location entity
     useEffect(() => {
-      const viewer = viewerRef.current
-      if (!viewer || !isViewerReady.current) return
+        const viewer = viewerRef.current
+        if (!viewer || !isViewerReady.current) return
 
-      // remove old user marker if exists
-      try { viewer.entities.removeById('__user_location') } catch { /* ignore */ }
+        try {
+            viewer.entities.removeById("__user_location")
+        } catch {
+            /* ignore */
+        }
 
-      if (userLocation) {
-          const [lon, lat] = userLocation
-          viewer.entities.add({
-              id: '__user_location',
-              position: Cartesian3.fromDegrees(lon, lat, 0),
-              point: {
-                  pixelSize: 14,
-                  color: Color.fromCssColorString('#2b9af3'),
-                  outlineColor: Color.WHITE,
-                  outlineWidth: 2,
-              },
-              description: '<div><strong>Your Location</strong></div>',
-          })
+        if (userLocation) {
+            const [lon, lat] = userLocation
+            viewer.entities.add({
+                id: "__user_location",
+                position: Cartesian3.fromDegrees(lon, lat, 10),
+                point: {
+                    pixelSize: 18,
+                    color: Color.fromCssColorString("#2b9af3"),
+                    outlineColor: Color.WHITE,
+                    outlineWidth: 2,
+                    heightReference: HeightReference.RELATIVE_TO_GROUND,
+                },
+                description: "<div><strong>Your Location</strong></div>",
+            })
 
-          // fly to user location
-          viewer.camera.flyTo({ destination: Cartesian3.fromDegrees(lon, lat, 8000), duration: 1.3 })
-      } else {
-          // no user location: nothing to add
-      }
-  }, [userLocation])
+            // fly to user location
+            viewer.camera.flyTo({ destination: Cartesian3.fromDegrees(lon, lat, 8000), duration: 1.3 })
+        } else {
+            // no user location: nothing to add
+        }
+
+        // ensure render
+        try {
+            viewer.scene.requestRender()
+        } catch {
+            /* ignore */
+        }
+    }, [userLocation])
 
     // fly to search coords when provided
     useEffect(() => {
         if (!searchCoords) return
         let cancelled = false
 
-      const tryFly = async () => {
-        if (cancelled) return
-        const viewer = viewerRef.current
-        if (isViewerReady.current && viewer && !viewer.isDestroyed()) {
-          const [lon, lat] = searchCoords
-          try {
-              await viewer.camera.flyTo({
-                  destination: Cartesian3.fromDegrees(lon, lat, 5000),
-              duration: 1.5,
-          })
-        } catch {
-              viewer.camera.setView({ destination: Cartesian3.fromDegrees(lon, lat, 5000) })
-          }
-      } else {
-          setTimeout(tryFly, 100)
-      }
-      }
-      tryFly()
-      return () => { cancelled = true }
-  }, [searchCoords])
+        const tryFly = async () => {
+            if (cancelled) return
+            const viewer = viewerRef.current
+            if (isViewerReady.current && viewer && !viewer.isDestroyed()) {
+                const [lon, lat] = searchCoords
+                try {
+                    await viewer.camera.flyTo({
+                        destination: Cartesian3.fromDegrees(lon, lat, 5000),
+                        duration: 1.5,
+                    })
+                } catch {
+                    viewer.camera.setView({ destination: Cartesian3.fromDegrees(lon, lat, 5000) })
+                }
+            } else {
+                setTimeout(tryFly, 100)
+            }
+        }
+        tryFly()
+        return () => {
+            cancelled = true
+        }
+    }, [searchCoords])
 
     // handle resize
     useEffect(() => {
         const handleResize = () => {
             if (isViewerReady.current && viewerRef.current && !viewerRef.current.isDestroyed()) {
                 ensureContainerSize()
-            requestAnimationFrame(() => {
-                if (viewerRef.current && !viewerRef.current.isDestroyed()) {
-                    viewerRef.current.resize()
-                }
-            })
+                requestAnimationFrame(() => {
+                    if (viewerRef.current && !viewerRef.current.isDestroyed()) {
+                        viewerRef.current.resize()
+                    }
+                })
+            }
         }
-    }
-      window.addEventListener('resize', handleResize)
-      return () => window.removeEventListener('resize', handleResize)
-  }, [ensureContainerSize])
+        window.addEventListener("resize", handleResize)
+        return () => window.removeEventListener("resize", handleResize)
+    }, [ensureContainerSize])
 
     return <div ref={container} className="w-full h-full absolute inset-0" />
 }

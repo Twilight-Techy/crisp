@@ -205,9 +205,10 @@ export default function AlertsPage() {
             </Card>
           </div>
 
-          <div className="grid lg:grid-cols-4 gap-8">
+          {/* Changed grid to 12 columns; main=9, sidebar=3 for a wider main content but still roomy sidebar */}
+          <div className="grid lg:grid-cols-12 gap-8">
             {/* Main Alerts Feed */}
-            <div className="lg:col-span-3 space-y-6">
+            <div className="lg:col-span-9 space-y-6">
               {/* Filters and Search */}
               <Card className="border-0 shadow-lg">
                 <CardContent className="p-6">
@@ -321,8 +322,8 @@ export default function AlertsPage() {
               </Card>
             </div>
 
-            {/* Sidebar */}
-            <div className="space-y-6">
+            {/* Sidebar (3/12 width) */}
+            <div className="lg:col-span-3 space-y-6">
               {/* Emergency Contacts */}
               <Card className="border-0 shadow-lg">
                 <CardHeader>
@@ -335,35 +336,38 @@ export default function AlertsPage() {
                   <div className="space-y-3">
                     <Button
                       variant="outline"
-                      className="w-full justify-start text-left bg-red-50 hover:bg-red-100 border-red-200 text-red-700 h-auto py-3"
+                      className="w-full justify-start text-left bg-red-50 hover:bg-red-100 border-red-200 text-red-700 h-auto py-3 overflow-hidden"
                     >
-                      <div className="flex items-center space-x-3">
-                        <span className="text-lg">🚨</span>
-                        <div className="text-left">
+                      {/* allow content to wrap and align to top; ensure text container can shrink/grow */}
+                      <div className="flex w-full items-start space-x-3 flex-wrap">
+                        <span className="text-lg flex-shrink-0">🚨</span>
+                        <div className="text-left min-w-0 flex-1 break-words whitespace-normal">
                           <div className="font-semibold">Emergency - 911</div>
                           <div className="text-xs text-red-600">Police, Fire, Medical</div>
                         </div>
                       </div>
                     </Button>
+
                     <Button
                       variant="outline"
-                      className="w-full justify-start text-left bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700 h-auto py-3"
+                      className="w-full justify-start text-left bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700 h-auto py-3 overflow-hidden"
                     >
-                      <div className="flex items-center space-x-3">
-                        <span className="text-lg">👮</span>
-                        <div className="text-left">
+                      <div className="flex w-full items-start space-x-3 flex-wrap">
+                        <span className="text-lg flex-shrink-0">👮</span>
+                        <div className="text-left min-w-0 flex-1 break-words whitespace-normal">
                           <div className="font-semibold">Police - (555) 123-4567</div>
                           <div className="text-xs text-blue-600">Non-emergency line</div>
                         </div>
                       </div>
                     </Button>
+
                     <Button
                       variant="outline"
-                      className="w-full justify-start text-left bg-green-50 hover:bg-green-100 border-green-200 text-green-700 h-auto py-3"
+                      className="w-full justify-start text-left bg-green-50 hover:bg-green-100 border-green-200 text-green-700 h-auto py-3 overflow-hidden"
                     >
-                      <div className="flex items-center space-x-3">
-                        <span className="text-lg">🏥</span>
-                        <div className="text-left">
+                      <div className="flex w-full items-start space-x-3 flex-wrap">
+                        <span className="text-lg flex-shrink-0">🏥</span>
+                        <div className="text-left min-w-0 flex-1 break-words whitespace-normal">
                           <div className="font-semibold">Non-Emergency - (555) 987-6543</div>
                           <div className="text-xs text-green-600">General inquiries</div>
                         </div>

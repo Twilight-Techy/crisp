@@ -147,9 +147,10 @@ export default function SafetyResourcesPage() {
             </CardContent>
           </Card>
 
-          <div className="grid lg:grid-cols-4 gap-8">
+          {/* Changed grid to 12 columns; main=9, sidebar=3 for a wider main content but still roomy sidebar */}
+          <div className="grid lg:grid-cols-12 gap-8">
             {/* Main Content - Safety Tips */}
-            <div className="lg:col-span-3 space-y-6">
+            <div className="lg:col-span-9 space-y-6">
               <h2 className="text-2xl font-bold flex items-center space-x-2">
                 <Lightbulb className="w-6 h-6 text-emerald-600" />
                 <span>Safety Tips & Guides</span>
@@ -171,7 +172,7 @@ export default function SafetyResourcesPage() {
                           </div>
                           <h3 className="text-lg font-semibold">{tip.title}</h3>
                         </div>
-                        <p className="text-muted-foreground text-sm leading-relaxed line-clamp-3">{tip.description}</p>
+                        <p className="text-muted-foreground text-sm leading-relaxed">{tip.description}</p>
                         <Button asChild variant="outline" className="w-full bg-transparent">
                           <Link href={`/safety/tips/${tip.category}/${tip.id}`}>
                             <ExternalLink className="w-4 h-4 mr-2" />
@@ -192,8 +193,8 @@ export default function SafetyResourcesPage() {
               </Card>
             </div>
 
-            {/* Sidebar */}
-            <div className="lg:col-span-1 space-y-6">
+            {/* Sidebar - 3/12 width */}
+            <div className="lg:col-span-3 space-y-6">
               {/* Emergency Contacts */}
               <Card className="border-0 shadow-lg">
                 <CardHeader>
@@ -208,13 +209,14 @@ export default function SafetyResourcesPage() {
                       key={index}
                       variant="outline"
                       className={`w-full justify-start text-left h-auto py-3 ${contact.color === "red"
-                          ? "bg-red-50 hover:bg-red-100 border-red-200 text-red-700"
-                          : "bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700"
+                        ? "bg-red-50 hover:bg-red-100 border-red-200 text-red-700"
+                        : "bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700"
                         }`}
                     >
-                      <div className="flex items-center space-x-3">
+                      {/* allow content to wrap, align to top, and let text container shrink/expand */}
+                      <div className="flex items-start space-x-3 w-full">
                         <contact.icon className={`w-5 h-5 ${getSeverityColor(contact.color)} flex-shrink-0`} />
-                        <div className="text-left">
+                        <div className="text-left min-w-0 whitespace-normal break-words">
                           <div className="font-semibold">{contact.name}</div>
                           <div className="text-xs text-muted-foreground">{contact.number}</div>
                           <div className="text-xs text-muted-foreground">{contact.description}</div>
@@ -236,13 +238,14 @@ export default function SafetyResourcesPage() {
                 <CardContent className="space-y-4">
                   {recentAlerts.map((alert, index) => (
                     <div key={index} className="space-y-2">
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-start space-x-2">
                         <AlertTriangle className={`w-4 h-4 ${getSeverityColor(alert.severity)}`} />
-                        <h4 className="font-semibold text-sm">{alert.title}</h4>
+                        {/* allow long titles to wrap on multiple lines */}
+                        <h4 className="font-semibold text-sm break-words">{alert.title}</h4>
                       </div>
                       <div className="flex items-center space-x-2 text-xs text-muted-foreground">
                         <MapPin className="w-3 h-3" />
-                        <span>{alert.location}</span>
+                        <span className="break-words">{alert.location}</span>
                         <Clock className="w-3 h-3 ml-2" />
                         <span>{alert.time}</span>
                       </div>

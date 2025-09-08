@@ -177,12 +177,12 @@ export default function TrackPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="font-semibold text-sm">Try a sample tracking code:</h4>
-                      <code className="text-sm text-emerald-600 font-mono">CRISP-ABC123XYZ</code>
+                      <code className="text-sm text-emerald-600 font-mono">CRISP-5B9E06AA</code>
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setTrackingCode("CRISP-ABC123XYZ")}
+                      onClick={() => setTrackingCode("CRISP-5B9E06AA")}
                       className="bg-transparent"
                     >
                       Use Sample

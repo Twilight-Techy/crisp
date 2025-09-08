@@ -1,15 +1,16 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useState, Suspense } from "react";
+import dynamic from "next/dynamic";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Shield,
   MapPin,
@@ -23,12 +24,15 @@ import {
   FileText,
   Phone,
   Mail,
-} from "lucide-react"
-import Link from "next/link"
-import { Navbar } from "@/components/navbar"
+} from "lucide-react";
+import Link from "next/link";
+import { Navbar } from "@/components/navbar";
+
+// Dynamically import MapPicker (no SSR)
+const MapPicker = dynamic(() => import("@/components/maps/MapPicker"), { ssr: false });
 
 export default function ReportPage() {
-  const [currentStep, setCurrentStep] = useState(1)
+  const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     incidentType: "",
     location: "",
@@ -39,8 +43,10 @@ export default function ReportPage() {
     contactMethod: "",
     contactInfo: "",
     evidence: [] as File[],
-  })
-  const [trackingCode, setTrackingCode] = useState("")
+    latitude: "" as string | number | null,
+    longitude: "" as string | number | null,
+  });
+  const [trackingCode, setTrackingCode] = useState("");
 
   const incidentTypes = [
     { value: "Theft", label: "Theft / Burglary", icon: "🏠" },
@@ -51,7 +57,7 @@ export default function ReportPage() {
     { value: "Noise", label: "Noise Complaint", icon: "🔊" },
     { value: "Traffic", label: "Traffic Violation", icon: "🚗" },
     { value: "Other", label: "Other", icon: "📝" },
-  ]
+  ];
 
   const steps = [
     { number: 1, title: "Incident Type", description: "What happened?" },
@@ -59,53 +65,104 @@ export default function ReportPage() {
     { number: 3, title: "Details", description: "Tell us more" },
     { number: 4, title: "Evidence", description: "Upload files (optional)" },
     { number: 5, title: "Contact", description: "How to reach you (optional)" },
-  ]
+  ];
 
   const handleNext = async () => {
     if (currentStep < 5) {
-      setCurrentStep(currentStep + 1)
+      setCurrentStep((s) => s + 1);
     } else {
       // Prepare form data
-      const body = new FormData()
+      const body = new FormData();
+      // append simple fields
       Object.entries(formData).forEach(([key, value]) => {
         if (key === "evidence") {
-          (value as File[]).forEach(file => body.append("evidence", file))
-        } else {
-          body.append(key, value as string)
+          (value as File[]).forEach((file) => body.append("evidence", file));
+        } else if (value !== null && value !== undefined) {
+          body.append(key, String(value));
         }
-      })
+      });
 
       // Submit to API
       try {
         const res = await fetch("/api/report", {
           method: "POST",
           body,
-        })
+        });
 
-        const result = await res.json()
+        const result = await res.json();
         if (result.success) {
-          setTrackingCode(result.trackingCode)
-          setCurrentStep(6)
+          setTrackingCode(result.trackingCode);
+          setCurrentStep(6);
         } else {
-          alert("Failed to submit report")
+          alert("Failed to submit report");
         }
       } catch (err) {
-        console.error(err)
-        alert("An error occurred during submission.")
+        console.error(err);
+        alert("An error occurred during submission.");
       }
     }
-  }
+  };
 
   const handlePrevious = () => {
     if (currentStep > 1) {
-      setCurrentStep(currentStep - 1)
+      setCurrentStep((s) => s - 1);
     }
-  }
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || [])
-    setFormData({ ...formData, evidence: [...formData.evidence, ...files] })
-  }
+    const files = Array.from(event.target.files || []);
+    setFormData((f) => ({ ...f, evidence: [...f.evidence, ...files] }));
+  };
+
+  // helper: reverse geocode lon,lat -> address using MapTiler
+  const reverseGeocode = async (lon: number, lat: number) => {
+    if (!process.env.NEXT_PUBLIC_MAPTILER_KEY) return null;
+    try {
+      const url = `https://api.maptiler.com/geocoding/${encodeURIComponent(`${lon},${lat}`)}.json?key=${process.env.NEXT_PUBLIC_MAPTILER_KEY}&language=en`;
+      const res = await fetch(url);
+      const data = await res.json();
+      // MapTiler responses vary; prefer label/place_name/text in that order
+      const feat = data?.features?.[0];
+      const address =
+        feat?.properties?.label || feat?.place_name || feat?.text || feat?.properties?.name || null;
+      return address;
+    } catch (err) {
+      console.error("reverseGeocode error", err);
+      return null;
+    }
+  };
+
+  // Called by MapPicker when user selects a point
+  const pickCoords = async (coords: [number, number], address?: string | null) => {
+    const [lon, lat] = coords;
+    if (address) {
+      setFormData((f) => ({ ...f, longitude: lon, latitude: lat, address }));
+    } else {
+      // if MapPicker didn't provide address, do reverse geocode here
+      const addr = await reverseGeocode(lon, lat);
+      setFormData((f) => ({ ...f, longitude: lon, latitude: lat, address: addr ?? "" }));
+    }
+  };
+
+  // Use the browser geolocation, set coords and reverse-geocode into address
+  const useMyLocation = () => {
+    if (!("geolocation" in navigator)) {
+      alert("Geolocation is not available in this browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { longitude, latitude } = pos.coords;
+        const addr = await reverseGeocode(longitude, latitude);
+        setFormData((f) => ({ ...f, latitude, longitude, address: addr ?? "" }));
+      },
+      (err) => {
+        console.error("geolocation error", err);
+        alert("Failed to get your location. Check permissions.");
+      },
+      { enableHighAccuracy: true }
+    );
+  };
 
   if (currentStep === 6) {
     return (
@@ -127,9 +184,7 @@ export default function ReportPage() {
                 <div className="bg-emerald-50 dark:bg-emerald-950/30 p-6 rounded-xl space-y-3">
                   <h3 className="font-semibold text-emerald-800 dark:text-emerald-200">Your Tracking Code</h3>
                   <div className="text-2xl font-mono font-bold text-emerald-600">{trackingCode}</div>
-                  <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                    Save this code to track your report status
-                  </p>
+                  <p className="text-sm text-emerald-700 dark:text-emerald-300">Save this code to track your report status</p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   <Button asChild className="bg-gradient-to-r from-emerald-600 to-green-600">
@@ -150,7 +205,7 @@ export default function ReportPage() {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -158,8 +213,6 @@ export default function ReportPage() {
       <Navbar />
 
       <div className="container mx-auto px-4 py-8 pt-20">
-        {" "}
-        {/* Added pt-20 here */}
         <div className="max-w-4xl mx-auto">
           {/* Progress Steps */}
           <div className="mb-8">
@@ -190,7 +243,7 @@ export default function ReportPage() {
           {/* Form Content */}
           <Card className="border-0 shadow-xl">
             <CardContent className="p-8">
-              {/* Step 1: Incident Type */}
+              {/* Step 1 */}
               {currentStep === 1 && (
                 <div className="space-y-6">
                   <div className="text-center space-y-2">
@@ -202,11 +255,9 @@ export default function ReportPage() {
                       <Card
                         key={type.value}
                         className={`cursor-pointer transition-all duration-200 hover:shadow-lg ${
-                          formData.incidentType === type.value
-                            ? "ring-2 ring-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
-                            : "hover:bg-muted/50"
+                          formData.incidentType === type.value ? "ring-2 ring-emerald-500 bg-emerald-50 dark:bg-emerald-950/30" : "hover:bg-muted/50"
                         }`}
-                        onClick={() => setFormData({ ...formData, incidentType: type.value })}
+                        onClick={() => setFormData((f) => ({ ...f, incidentType: type.value }))}
                       >
                         <CardContent className="p-6 flex items-center space-x-4">
                           <div className="text-2xl">{type.icon}</div>
@@ -220,7 +271,7 @@ export default function ReportPage() {
                 </div>
               )}
 
-              {/* Step 2: Location */}
+              {/* Step 2: Location with MapPicker */}
               {currentStep === 2 && (
                 <div className="space-y-6">
                   <div className="text-center space-y-2">
@@ -231,43 +282,68 @@ export default function ReportPage() {
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="address">Street Address</Label>
-                        <Input
-                          id="address"
-                          placeholder="123 Main Street"
-                          value={formData.address}
-                          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                        />
+                        <Input id="address" placeholder="123 Main Street" value={formData.address} onChange={(e) => setFormData((f) => ({ ...f, address: e.target.value }))} />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="location">Neighborhood/Area</Label>
-                        <Input
-                          id="location"
-                          placeholder="Downtown, Park District, etc."
-                          value={formData.location}
-                          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                        />
+                        <Input id="location" placeholder="Downtown, Park District, etc." value={formData.location} onChange={(e) => setFormData((f) => ({ ...f, location: e.target.value }))} />
                       </div>
                     </div>
+
                     <Card className="bg-muted/30 border-dashed">
-                      <CardContent className="p-6 text-center space-y-4">
-                        <MapPin className="w-12 h-12 text-emerald-600 mx-auto" />
-                        <div>
-                          <h4 className="font-semibold">Interactive Map</h4>
-                          <p className="text-sm text-muted-foreground">
-                            Click on the map to pinpoint the exact location (Feature coming soon)
-                          </p>
+                      <CardContent className="p-6 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <MapPin className="w-12 h-12 text-emerald-600" />
+                            <div>
+                              <h4 className="font-semibold">Interactive Map</h4>
+                              <p className="text-sm text-muted-foreground">Click the map to pinpoint the exact location</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Button variant="outline" onClick={useMyLocation} className="bg-transparent">
+                              Use My Location
+                            </Button>
+                            <Button variant="ghost" onClick={() => { setFormData((f) => ({ ...f, latitude: null, longitude: null })); }}>
+                              Clear
+                            </Button>
+                          </div>
                         </div>
-                        <Button variant="outline" disabled>
-                          <MapPin className="w-4 h-4 mr-2" />
-                          Use Map Picker
-                        </Button>
+
+                        <div>
+                          <Suspense fallback={<div className="w-full h-64 bg-muted rounded-md" />}>
+                            <MapPicker
+                              initial={
+                                formData.latitude && formData.longitude
+                                  ? [Number(formData.longitude), Number(formData.latitude)]
+                                  : null
+                              }
+                              onSelect={(coords) => pickCoords(coords)}
+                              className="w-full h-64 rounded-md overflow-hidden"
+                            />
+                          </Suspense>
+                        </div>
+
+                        <div className="text-sm text-muted-foreground">
+                          <div>Selected Coordinates:</div>
+                          <div className="mt-1">
+                            <span className="font-mono">
+                              Lon:{" "}
+                              {formData.longitude !== null && formData.longitude !== "" ? Number(formData.longitude).toFixed(6) : "—"}
+                            </span>
+                            <span className="ml-4 font-mono">
+                              Lat:{" "}
+                              {formData.latitude !== null && formData.latitude !== "" ? Number(formData.latitude).toFixed(6) : "—"}
+                            </span>
+                          </div>
+                        </div>
                       </CardContent>
                     </Card>
                   </div>
                 </div>
               )}
 
-              {/* Step 3: Details */}
+              {/* Step 3 */}
               {currentStep === 3 && (
                 <div className="space-y-6">
                   <div className="text-center space-y-2">
@@ -277,32 +353,18 @@ export default function ReportPage() {
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="datetime">When did this occur?</Label>
-                      <Input
-                        id="datetime"
-                        type="datetime-local"
-                        value={formData.dateTime}
-                        onChange={(e) => setFormData({ ...formData, dateTime: e.target.value })}
-                      />
+                      <Input id="datetime" type="datetime-local" value={formData.dateTime} onChange={(e) => setFormData((f) => ({ ...f, dateTime: e.target.value }))} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="description">Description of the incident</Label>
-                      <Textarea
-                        id="description"
-                        placeholder="Please describe what happened, including any relevant details about people, vehicles, or Other important information..."
-                        rows={6}
-                        value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      />
+                      <Textarea id="description" placeholder="Please describe what happened..." rows={6} value={formData.description} onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))} />
                     </div>
                     <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
                       <CardContent className="p-4 flex items-start space-x-3">
                         <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
                         <div className="text-sm">
                           <p className="font-medium text-amber-800 dark:text-amber-200">Privacy Notice</p>
-                          <p className="text-amber-700 dark:text-amber-300">
-                            Do not include personal information that could identify you unless you choose to provide
-                            contact details in the next steps.
-                          </p>
+                          <p className="text-amber-700 dark:text-amber-300">Do not include personal information that could identify you unless you choose to provide contact details in the next steps.</p>
                         </div>
                       </CardContent>
                     </Card>
@@ -310,7 +372,7 @@ export default function ReportPage() {
                 </div>
               )}
 
-              {/* Step 4: Evidence */}
+              {/* Step 4 */}
               {currentStep === 4 && (
                 <div className="space-y-6">
                   <div className="text-center space-y-2">
@@ -325,14 +387,7 @@ export default function ReportPage() {
                           <h4 className="font-semibold">Drag and drop files here</h4>
                           <p className="text-sm text-muted-foreground">or click to browse (Max 10MB per file)</p>
                         </div>
-                        <Input
-                          type="file"
-                          multiple
-                          accept="image/*,video/*,.pdf,.doc,.docx"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                          id="file-upload"
-                        />
+                        <Input type="file" multiple accept="image/*,video/*,.pdf,.doc,.docx" onChange={handleFileUpload} className="hidden" id="file-upload" />
                         <Button variant="outline" asChild>
                           <label htmlFor="file-upload" className="cursor-pointer">
                             <Camera className="w-4 h-4 mr-2" />
@@ -350,14 +405,7 @@ export default function ReportPage() {
                               <Camera className="w-4 h-4 text-emerald-600" />
                               <span className="text-sm">{file.name}</span>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                const newFiles = formData.evidence.filter((_, i) => i !== index)
-                                setFormData({ ...formData, evidence: newFiles })
-                              }}
-                            >
+                            <Button variant="ghost" size="sm" onClick={() => setFormData((f) => ({ ...f, evidence: f.evidence.filter((_, i) => i !== index) }))}>
                               Remove
                             </Button>
                           </div>
@@ -368,7 +416,7 @@ export default function ReportPage() {
                 </div>
               )}
 
-              {/* Step 5: Contact */}
+              {/* Step 5 */}
               {currentStep === 5 && (
                 <div className="space-y-6">
                   <div className="text-center space-y-2">
@@ -377,23 +425,14 @@ export default function ReportPage() {
                   </div>
                   <div className="space-y-6">
                     <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="anonymous"
-                        checked={formData.anonymous}
-                        onCheckedChange={(checked) => setFormData({ ...formData, anonymous: checked as boolean })}
-                      />
-                      <Label htmlFor="anonymous" className="text-sm">
-                        Keep this report completely anonymous (recommended)
-                      </Label>
+                      <Checkbox id="anonymous" checked={formData.anonymous} onCheckedChange={(checked) => setFormData((f) => ({ ...f, anonymous: checked as boolean }))} />
+                      <Label htmlFor="anonymous" className="text-sm">Keep this report completely anonymous (recommended)</Label>
                     </div>
                     {!formData.anonymous && (
                       <div className="space-y-4">
                         <div className="space-y-2">
                           <Label>Preferred contact method</Label>
-                          <Select
-                            value={formData.contactMethod}
-                            onValueChange={(value) => setFormData({ ...formData, contactMethod: value })}
-                          >
+                          <Select value={formData.contactMethod} onValueChange={(value) => setFormData((f) => ({ ...f, contactMethod: value }))}>
                             <SelectTrigger>
                               <SelectValue placeholder="Select contact method" />
                             </SelectTrigger>
@@ -405,25 +444,10 @@ export default function ReportPage() {
                         </div>
                         {formData.contactMethod && (
                           <div className="space-y-2">
-                            <Label htmlFor="contact-info">
-                              {formData.contactMethod === "email" ? "Email Address" : "Phone Number"}
-                            </Label>
+                            <Label htmlFor="contact-info">{formData.contactMethod === "email" ? "Email Address" : "Phone Number"}</Label>
                             <div className="relative">
-                              {formData.contactMethod === "email" ? (
-                                <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                              ) : (
-                                <Phone className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                              )}
-                              <Input
-                                id="contact-info"
-                                type={formData.contactMethod === "email" ? "email" : "tel"}
-                                placeholder={
-                                  formData.contactMethod === "email" ? "your@email.com" : "+1 (555) 123-4567"
-                                }
-                                className="pl-10"
-                                value={formData.contactInfo}
-                                onChange={(e) => setFormData({ ...formData, contactInfo: e.target.value })}
-                              />
+                              {formData.contactMethod === "email" ? <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" /> : <Phone className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />}
+                              <Input id="contact-info" type={formData.contactMethod === "email" ? "email" : "tel"} placeholder={formData.contactMethod === "email" ? "your@email.com" : "+1 (555) 123-4567"} className="pl-10" value={formData.contactInfo} onChange={(e) => setFormData((f) => ({ ...f, contactInfo: e.target.value }))} />
                             </div>
                           </div>
                         )}
@@ -434,10 +458,7 @@ export default function ReportPage() {
                         <Shield className="w-5 h-5 text-emerald-600 mt-0.5" />
                         <div className="text-sm">
                           <p className="font-medium text-emerald-800 dark:text-emerald-200">Privacy Guarantee</p>
-                          <p className="text-emerald-700 dark:text-emerald-300">
-                            Your contact information will only be used to provide updates on your report and will never
-                            be shared with third parties.
-                          </p>
+                          <p className="text-emerald-700 dark:text-emerald-300">Your contact information will only be used to provide updates on your report and will never be shared with third parties.</p>
                         </div>
                       </CardContent>
                     </Card>
@@ -445,21 +466,13 @@ export default function ReportPage() {
                 </div>
               )}
 
-              {/* Navigation Buttons */}
+              {/* Navigation */}
               <div className="flex justify-between pt-8 border-t">
-                <Button
-                  variant="outline"
-                  onClick={handlePrevious}
-                  disabled={currentStep === 1}
-                  className="bg-transparent"
-                >
+                <Button variant="outline" onClick={handlePrevious} disabled={currentStep === 1} className="bg-transparent">
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Previous
                 </Button>
-                <Button
-                  onClick={handleNext}
-                  className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700"
-                >
+                <Button onClick={handleNext} className="bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700">
                   {currentStep === 5 ? "Submit Report" : "Next"}
                   {currentStep < 5 && <ArrowRight className="w-4 h-4 ml-2" />}
                 </Button>
@@ -469,5 +482,5 @@ export default function ReportPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

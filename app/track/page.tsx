@@ -26,43 +26,43 @@ export default function TrackPage() {
   const [reportData, setReportData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
 
-  // Mock report data
-  const mockReport = {
-    id: "CRISP-ABC123XYZ",
-    type: "Theft",
-    location: "Downtown District, Main St & 5th Ave",
-    submittedAt: "2024-01-15T14:30:00Z",
-    status: "investigating",
-    priority: "medium",
-    updates: [
-      {
-        date: "2024-01-15T14:30:00Z",
-        status: "submitted",
-        message: "Report received and assigned tracking code",
-        officer: "System",
-      },
-      {
-        date: "2024-01-15T15:45:00Z",
-        status: "under_review",
-        message: "Report is being reviewed by our moderation team",
-        officer: "Moderation Team",
-      },
-      {
-        date: "2024-01-15T16:20:00Z",
-        status: "verified",
-        message: "Report has been verified and forwarded to local authorities",
-        officer: "Officer Johnson",
-      },
-      {
-        date: "2024-01-16T09:15:00Z",
-        status: "investigating",
-        message: "Investigation is underway. Additional patrols have been assigned to the area",
-        officer: "Detective Smith",
-      },
-    ],
-    description: "Bicycle theft reported outside shopping center",
-    anonymous: true,
-  }
+  // // Mock report data
+  // const mockReport = {
+  //   id: "CRISP-ABC123XYZ",
+  //   type: "Theft",
+  //   location: "Downtown District, Main St & 5th Ave",
+  //   submittedAt: "2024-01-15T14:30:00Z",
+  //   status: "investigating",
+  //   priority: "medium",
+  //   updates: [
+  //     {
+  //       date: "2024-01-15T14:30:00Z",
+  //       status: "submitted",
+  //       message: "Report received and assigned tracking code",
+  //       officer: "System",
+  //     },
+  //     {
+  //       date: "2024-01-15T15:45:00Z",
+  //       status: "under_review",
+  //       message: "Report is being reviewed by our moderation team",
+  //       officer: "Moderation Team",
+  //     },
+  //     {
+  //       date: "2024-01-15T16:20:00Z",
+  //       status: "verified",
+  //       message: "Report has been verified and forwarded to local authorities",
+  //       officer: "Officer Johnson",
+  //     },
+  //     {
+  //       date: "2024-01-16T09:15:00Z",
+  //       status: "investigating",
+  //       message: "Investigation is underway. Additional patrols have been assigned to the area",
+  //       officer: "Detective Smith",
+  //     },
+  //   ],
+  //   description: "Bicycle theft reported outside shopping center",
+  //   anonymous: true,
+  // }
 
   const handleSearch = async () => {
     setLoading(true)
@@ -99,18 +99,12 @@ export default function TrackPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "submitted":
+      case "received":
         return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-      case "under_review":
+      case "under_investigation":
         return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
-      case "verified":
-        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-      case "investigating":
-        return "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
       case "resolved":
-        return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-      case "closed":
-        return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
+        return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
       default:
         return "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
     }
@@ -118,18 +112,12 @@ export default function TrackPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "submitted":
+      case "received":
         return <FileText className="w-4 h-4" />
-      case "under_review":
+      case "under_investigation":
         return <Eye className="w-4 h-4" />
-      case "verified":
-        return <CheckCircle className="w-4 h-4" />
-      case "investigating":
-        return <Search className="w-4 h-4" />
       case "resolved":
         return <CheckCircle className="w-4 h-4" />
-      case "closed":
-        return <FileText className="w-4 h-4" />
       default:
         return <Clock className="w-4 h-4" />
     }
@@ -292,8 +280,10 @@ export default function TrackPage() {
                         <div className="flex-1 space-y-2">
                           <div className="flex items-center justify-between">
                             <Badge className={getStatusColor(update.status)}>
-                              {update.status.replace("_", " ").charAt(0).toUpperCase() +
-                                update.status.replace("_", " ").slice(1)}
+                              {update.status
+                                .split("_")
+                                .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+                                .join(" ")}
                             </Badge>
                             <span className="text-sm text-muted-foreground">{formatDate(update.date)}</span>
                           </div>

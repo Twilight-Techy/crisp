@@ -78,13 +78,22 @@ export default function MapPicker({
       } else {
         markerRef.current.setLngLat(lngLat);
       }
-      map.flyTo({ center: lngLat, zoom: 14 });
+
+      // Use a short easeTo animation for snappier UX. For instant, use map.jumpTo({ center: lngLat, zoom: 14 })
+      map.easeTo({ center: lngLat, zoom: 14, duration: 350, essential: true });
 
       if (shouldNotify && onSelect) {
-        // try reverse geocode and call onSelect with address if available
-        const [lon, lat] = lngLat;
-        const addr = await reverseGeocode(lon, lat);
-        onSelect([lon, lat], addr);
+        // call onSelect immediately with coords so caller can react quickly
+        onSelect(lngLat, null);
+
+        // perform reverse geocode in background and notify when we have an address
+        reverseGeocode(lngLat[0], lngLat[1])
+          .then((addr) => {
+            if (addr && onSelect) onSelect(lngLat, addr);
+          })
+          .catch((err) => {
+            console.error("reverseGeocode background error", err);
+          });
       }
     };
 
@@ -108,10 +117,17 @@ export default function MapPicker({
         markerRef.current.setLngLat([lon, lat]);
       }
 
-      // do reverse geocoding (async) and call onSelect with address if found
+      // snap/ease quickly
+      map.easeTo({ center: [lon, lat], zoom: 14, duration: 350, essential: true });
+
       if (onSelect) {
-        const addr = await reverseGeocode(lon, lat);
-        onSelect([lon, lat], addr);
+        onSelect([lon, lat], null);
+        // resolve address async and notify again when available
+        reverseGeocode(lon, lat)
+          .then((addr) => {
+            if (addr) onSelect([lon, lat], addr);
+          })
+          .catch((err) => console.error("MapPicker reverseGeocode error", err));
       }
     };
 

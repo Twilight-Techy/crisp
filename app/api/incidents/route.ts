@@ -17,7 +17,8 @@ export async function GET(request: Request) {
         where.type = { in: types }
     }
     if (since) {
-        let date = new Date()
+        const date = new Date()
+        let bounded = true
         switch (since) {
             case '24hours':
                 date.setDate(date.getDate() - 1)
@@ -31,9 +32,19 @@ export async function GET(request: Request) {
             case '90days':
                 date.setMonth(date.getMonth() - 3)
                 break
-            // custom: don't add filter
+            case '12months':
+                date.setFullYear(date.getFullYear() - 1)
+                break
+            default:
+                // 'all', 'custom' and anything unrecognised are unbounded.
+                // Previously these fell through and applied `gte: new Date()`,
+                // which filtered to reports from the future and always
+                // returned an empty map.
+                bounded = false
         }
-        where.reportedAt = { gte: date }
+        if (bounded) {
+            where.reportedAt = { gte: date }
+        }
     }
     if (status && status !== 'all') {
         where.status = status

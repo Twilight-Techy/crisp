@@ -60,7 +60,7 @@ export default function MapPage() {
   const [mapView, setMapView] = useState<"2d" | "3d">("2d")
   const [filters, setFilters] = useState({
     crimeTypes: [] as string[],
-    dateRange: "30days",
+    dateRange: "12months",
     status: "all",
   })
   const [searchQuery, setSearchQuery] = useState("")
@@ -309,6 +309,8 @@ export default function MapPage() {
                   <SelectItem value="7days">Last 7 Days</SelectItem>
                   <SelectItem value="30days">Last 30 Days</SelectItem>
                   <SelectItem value="90days">Last 3 Months</SelectItem>
+                  <SelectItem value="12months">Last 12 Months</SelectItem>
+                  <SelectItem value="all">All Time</SelectItem>
                   <SelectItem value="custom">Custom Range</SelectItem>
                 </SelectContent>
               </Select>

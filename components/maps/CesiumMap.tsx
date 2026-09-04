@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect, useCallback } from "react"
+import { useRef, useEffect, useCallback, useState } from "react"
 import {
     Viewer,
     Ion,
@@ -38,6 +38,10 @@ export default function CesiumMap({
     const container = useRef<HTMLDivElement>(null)
     const viewerRef = useRef<Viewer>()
     const isViewerReady = useRef(false)
+    // The ref alone cannot drive effects: mutating it never triggers a re-render,
+    // so effects that bail on "not ready yet" would never run again. This state
+    // mirrors it so those effects re-run once the viewer finishes initialising.
+    const [viewerReady, setViewerReady] = useState(false)
 
     const rawColorMap: Record<string, Color> = {
         theft: Color.RED,
@@ -138,6 +142,7 @@ export default function CesiumMap({
                     if (canvas.clientWidth > 0 && canvas.clientHeight > 0) {
                         viewer.resize()
                         isViewerReady.current = true
+                        setViewerReady(true)
                         // center either at user location or a default
                         if (userLocation) {
                             const [lon, lat] = userLocation
@@ -157,6 +162,7 @@ export default function CesiumMap({
             } catch (error) {
                 console.error("Failed to initialize Cesium:", error)
                 isViewerReady.current = false
+                setViewerReady(false)
             }
         }
 
@@ -165,6 +171,7 @@ export default function CesiumMap({
         return () => {
             mounted = false
             isViewerReady.current = false
+            setViewerReady(false)
             if (viewerRef.current && !viewerRef.current.isDestroyed()) {
                 try {
                     viewerRef.current.destroy()
@@ -179,7 +186,7 @@ export default function CesiumMap({
     // Add/refresh incident entities whenever incidents change
     useEffect(() => {
         const viewer = viewerRef.current
-        if (!viewer || !isViewerReady.current) return
+        if (!viewer || !viewerReady) return
 
         // Defensive: ignore empty coords or invalid numbers
         const validIncidents = incidents.filter(
@@ -281,12 +288,12 @@ export default function CesiumMap({
             const centerLat = (minLat + maxLat) / 2
             viewer.camera.setView({ destination: Cartesian3.fromDegrees(centerLon, centerLat, 15000) })
         }
-    }, [incidents, userLocation])
+    }, [incidents, userLocation, viewerReady])
 
     // add or update user location entity
     useEffect(() => {
         const viewer = viewerRef.current
-        if (!viewer || !isViewerReady.current) return
+        if (!viewer || !viewerReady) return
 
         try {
             viewer.entities.removeById("__user_location")
@@ -322,7 +329,7 @@ export default function CesiumMap({
         } catch {
             /* ignore */
         }
-    }, [userLocation])
+    }, [userLocation, viewerReady])
 
     // fly to search coords when provided
     useEffect(() => {
